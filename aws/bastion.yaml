@@ -1,0 +1,119 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'bastion server + bastion EIP, bastion security group'
+
+# environment type & bash parameters
+Parameters:
+  ParentStack:
+    Type: String
+    Description: 'Parent VPC Stack Name'
+
+  EnvType:
+    Type: String
+    Description: 'Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+  EC2InstanceImageId:
+    Type: AWS::EC2::Image::Id
+    Description: 'Specifies the Bastion server EC2 Amazon Machine Image(AMI)'
+    Default: 'ami-3bd3c45c'
+
+  EC2InstanceType:
+    Type: String
+    Description: 'Specifies the Bastion server EC2 Type'
+    Default: 't2.micro'
+    AllowedValues:
+        - 't2.nano'
+        - 't2.micro'
+        - 't2.small'
+
+  EC2BastionKeyPair:
+    Type: String
+    Description: 'The Bastion Server KeyPair'
+    Default: ''
+
+  BastionIncomingIP:
+    Type: String
+    Description: 'The Bastion Server Incoming IP, Special IP the CIDR must be xxx.xxx.xxx.xx/32'
+    Default: '0.0.0.0/0'
+
+##### create resource #####
+Resources:
+  BastionSSHSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'BastionSSHSecurityGroup'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Sub '${BastionIncomingIP}'
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvType}-bastion-ssh'
+        - Key: Stage
+          Value:
+            Ref: EnvType
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
+  BastionPrivateSSHSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'BastionPrivateSSHSecurityGroup'
+      SecurityGroupIngress:
+        - IpProtocol: 'tcp'
+          FromPort: '22'
+          ToPort: '22'
+          SourceSecurityGroupId:
+            Ref: BastionSSHSecurityGroup
+        - IpProtocol: 'icmp'
+          FromPort: -1
+          ToPort: -1
+          SourceSecurityGroupId:
+            Ref: BastionSSHSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvType}-bastion-private-ssh'
+        - Key: Stage
+          Value:
+            Ref: EnvType
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
+  BastionEC2:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      AvailabilityZone: !Select [ '0', !GetAZs { Ref: 'AWS::Region' } ]
+      #ref InstanceProfile
+      #IamInstanceProfile: String
+      ImageId: !Sub '${EC2InstanceImageId}'
+      InstanceInitiatedShutdownBehavior: 'stop'
+      InstanceType: !Sub '${EC2InstanceType}'
+      KeyName: !Sub '${EC2BastionKeyPair}'
+      Monitoring: 'true'
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet:
+            - Ref: BastionSSHSecurityGroup
+          SubnetId:
+            'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
+          DeleteOnTermination: 'true'
+#      SecurityGroupIds:
+#        - !Ref BastionSSHSecurityGroup
+#      SubnetId:
+#        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
+      UserData:
+        'Fn::Base64': !Sub |
+           #!/bin/bash -x
+           sudo yum update -y
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvType}-bastion-server'
+        - Key: Stage
+          Value:
+            Ref: EnvType
