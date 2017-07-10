@@ -1,0 +1,102 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'NAT Subnet, EIP + NatGateway'
+
+# environment type & bash parameters
+Parameters:
+  ParentStack:
+    Type: String
+    Description: 'Parent VPC Stack Name'
+
+  EnvType:
+    Type: String
+    Description: 'Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+
+### create resource ###
+Resources:
+  ##### NAT Gateway ######
+  # NAT Gateway , if private never need connect to internet, don't need a Natgeteway & eip
+  # eip - 1
+  NatEipA:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: 'VPC'
+  # eip - 2
+  NatEipB:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: 'VPC'
+
+  # nat gateway - 1
+  NatGatewayA:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt 'NatEipA.AllocationId'
+      SubnetId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
+
+  # nat gateway - 2
+  NatGatewayB:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt 'NatEipB.AllocationId'
+      SubnetId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetB'
+
+
+  ##### add route rule to Route Table #####
+  NatRouteA:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref 'NatGatewayA'
+      RouteTableId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-NatRouteTableA'
+
+  NatRouteB:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref 'NatGatewayB'
+      RouteTableId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-NatRouteTableB'
+
+
+  ##### association Route Table to Subnets #####
+  # association route table to nat subnet a
+  NatSubnetARouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-NatRouteTableA'
+      SubnetId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-NatSubnetA'
+
+  # association route table to nat subnet b
+  NatSubnetBRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-NatRouteTableB'
+      SubnetId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-NatSubnetB'
+
+
+Outputs:
+  NatGatewayA:
+    Value:
+      Ref: 'NatGatewayA'
+    Export:
+      Name: !Sub '${ParentStack}-${EnvType}-NatGatewayA'
+  NatGatewayB:
+    Value:
+      Ref: 'NatGatewayB'
+    Export:
+      Name: !Sub '${ParentStack}-${EnvType}-NatGatewayB'
