@@ -16,14 +16,15 @@ Parameters:
       - 'prod'
       - 'stag'
       - 'dev'
+  PrivateSecurityGroup1GrantAnywhere:
+    Type: String
+    AllowedValues: ["yes", "no"]
+    Description: select yes if private subnet layer 1 grant anywhere http/https, if no only from elb http/https source.
+    Default: "no"
+
 
 Conditions:
-  IsProd:
-    'Fn::Equals': [ Ref: EnvType, 'prod' ]
-  NotProd:
-    'Fn::Or':
-      - 'Fn::Equals': [ Ref: EnvType, 'dev']
-      - 'Fn::Equals': [ Ref: EnvType, 'stag']
+  PrivateSecurityGroup1GrantAnywhereCondition: !Equals [ !Ref PrivateSecurityGroup1GrantAnywhere, "yes" ]
 
 # parameters for env-type
 Mappings:
@@ -366,24 +367,61 @@ Resources:
     Properties:
       GroupDescription: 'PublicSecurityGroup'
       SecurityGroupIngress:
+        !If
+        - PrivateSecurityGroup1GrantAnywhereCondition
         -
-          IpProtocol: 'tcp'
-          FromPort: '80'
-          ToPort: '80'
-          SourceSecurityGroupId:
-            Ref: ELBSecurityGroup
+          -
+            IpProtocol: 'tcp'
+            FromPort: '80'
+            ToPort: '80'
+            CidrIp: '0.0.0.0/0'
+          -
+            IpProtocol: 'tcp'
+            FromPort: '443'
+            ToPort: '443'
+            CidrIp: '0.0.0.0/0'
         -
-          IpProtocol: 'tcp'
-          FromPort: '443'
-          ToPort: '443'
-          SourceSecurityGroupId:
-            Ref: ELBSecurityGroup
+          -
+            IpProtocol: 'tcp'
+            FromPort: '80'
+            ToPort: '80'
+            SourceSecurityGroupId:
+              Ref: ELBSecurityGroup
+          -
+            IpProtocol: 'tcp'
+            FromPort: '443'
+            ToPort: '443'
+            SourceSecurityGroupId:
+              Ref: ELBSecurityGroup
       Tags:
         -
           Key: Name
           Value: !Sub '${EnvType}-private-web'
       VpcId:
         Ref: 'VPC'
+  # PrivateSecurityGroup1:
+  #   Type: 'AWS::EC2::SecurityGroup'
+  #   Properties:
+  #     GroupDescription: 'PublicSecurityGroup'
+  #     SecurityGroupIngress:
+  #       -
+  #         IpProtocol: 'tcp'
+  #         FromPort: '80'
+  #         ToPort: '80'
+  #         SourceSecurityGroupId:
+  #           Ref: ELBSecurityGroup
+  #       -
+  #         IpProtocol: 'tcp'
+  #         FromPort: '443'
+  #         ToPort: '443'
+  #         SourceSecurityGroupId:
+  #           Ref: ELBSecurityGroup
+  #     Tags:
+  #       -
+  #         Key: Name
+  #         Value: !Sub '${EnvType}-private-web'
+  #     VpcId:
+  #       Ref: 'VPC'
 
 ##### output resource to another stack #####
 Outputs:
@@ -477,3 +515,8 @@ Outputs:
       Ref: 'PrivateSecurityGroup1'
     Export:
       Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup1'
+  PrivateSecurityGroup1GrantAnywhere:
+    Value:
+      Ref: 'PrivateSecurityGroup1GrantAnywhere'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup1GrantAnywhere'
