@@ -1,0 +1,479 @@
+# reference doc
+## Resource Types reference : http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html
+## Function reference : http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference.html
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS Basic infrastructure, one vpc, 2 public subnet , 4 private subnet , security group 80/443 for elb/first layer private subnet, vpc-endpoint'
+
+# environment type & bash parameters
+Parameters:
+  EnvType:
+    Type: String
+    Description: 'Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+Conditions:
+  IsProd:
+    'Fn::Equals': [ Ref: EnvType, 'prod' ]
+  NotProd:
+    'Fn::Or':
+      - 'Fn::Equals': [ Ref: EnvType, 'dev']
+      - 'Fn::Equals': [ Ref: EnvType, 'stag']
+
+# parameters for env-type
+Mappings:
+  CIDR:
+    dev:
+      VPC: '172.16.0.0/16'
+      PublicSubnetA: '172.16.10.0/24'
+      PublicSubnetB: '172.16.20.0/24'
+      PrivateSubnet1A: '172.16.50.0/24'
+      PrivateSubnet1B: '172.16.60.0/24'
+      PrivateSubnet2A: '172.16.70.0/24'
+      PrivateSubnet2B: '172.16.80.0/24'
+      NatSubnetA: '172.16.230.0/24'
+      NatSubnetB: '172.16.240.0/24'
+    stag:
+      VPC: '172.16.0.0/16'
+      PublicSubnetA: '172.16.10.0/24'
+      PublicSubnetB: '172.16.20.0/24'
+      PrivateSubnet1A: '172.16.50.0/24'
+      PrivateSubnet1B: '172.16.60.0/24'
+      PrivateSubnet2A: '172.16.70.0/24'
+      PrivateSubnet2B: '172.16.80.0/24'
+      NatSubnetA: '172.16.230.0/24'
+      NatSubnetB: '172.16.240.0/24'
+    prod:
+      VPC: '172.16.0.0/16'
+      PublicSubnetA: '172.16.10.0/24'
+      PublicSubnetB: '172.16.20.0/24'
+      PrivateSubnet1A: '172.16.50.0/24'
+      PrivateSubnet1B: '172.16.60.0/24'
+      PrivateSubnet2A: '172.16.70.0/24'
+      PrivateSubnet2B: '172.16.80.0/24'
+      NatSubnetA: '172.16.230.0/24'
+      NatSubnetB: '172.16.240.0/24'
+
+
+##### create resource #####
+Resources:
+  ##### VPC #####
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'VPC' ]
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: 'default'
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-vpc'
+
+
+  ##### Subnets #####
+  # create public subnet - first AZ
+  PublicSubnetA:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '0', !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PublicSubnetA' ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-public-a'
+      VpcId:
+        Ref: 'VPC'
+
+  # create public subnet - second AZ
+  PublicSubnetB:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '1', !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PublicSubnetB' ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-public-b'
+      VpcId:
+        Ref: 'VPC'
+
+  # create first layer private subnet - first AZ
+  PrivateSubnet1A:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '0', !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PrivateSubnet1A' ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-private-1a'
+      VpcId:
+        Ref: 'VPC'
+
+  # create first layer private subnet - second AZ
+  PrivateSubnet1B:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '1', !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PrivateSubnet1B' ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-private-1b'
+      VpcId:
+        Ref: 'VPC'
+
+  # create second layer private subnet - first AZ
+  PrivateSubnet2A:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '0', !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PrivateSubnet2A' ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-private-2a'
+      VpcId:
+        Ref: 'VPC'
+
+  # create second layer private subnet - second AZ
+  PrivateSubnet2B:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '1', !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PrivateSubnet2B' ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-private-2b'
+      VpcId:
+        Ref: 'VPC'
+
+  # create nat layer subnet - first AZ
+  NatSubnetA:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '0', !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'NatSubnetA' ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-nat-a'
+      VpcId:
+        Ref: 'VPC'
+
+  # create nat layer subnet - second AZ
+  NatSubnetB:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '1', !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'NatSubnetB' ]
+      MapPublicIpOnLaunch: false
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-nat-b'
+      VpcId:
+        Ref: 'VPC'
+
+
+  ##### Internet Gateway(igw) #####
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-igw'
+
+  # IGW attach to VPC
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId:
+        Ref: 'InternetGateway'
+      VpcId:
+        Ref: 'VPC'
+
+
+  ##### Route Table #####
+  # public route table
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-public-rt'
+      VpcId:
+        Ref: 'VPC'
+
+  # private route 1a - first
+  PrivateRouteTable1A:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-private-rt-1a'
+      VpcId:
+        Ref: 'VPC'
+
+  # private route 1b - second
+  PrivateRouteTable1B:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-private-rt-1b'
+      VpcId:
+        Ref: 'VPC'
+
+  # private route 2a - first
+  PrivateRouteTable2A:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-private-rt-2a'
+      VpcId:
+        Ref: 'VPC'
+
+  # private route 2b - second
+  PrivateRouteTable2B:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-private-rt-2b'
+      VpcId:
+        Ref: 'VPC'
+
+  # nat route a
+  NatRouteTableA:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-nat-rt-a'
+      VpcId:
+        Ref: 'VPC'
+
+  # nat route b
+  NatRouteTableB:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-nat-rt-b'
+      VpcId:
+        Ref: 'VPC'
+
+
+  ##### add route rule to Route Table #####
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId:
+        Ref: 'InternetGateway'
+      RouteTableId:
+        Ref: 'PublicRouteTable'
+
+
+  ##### association Route Table to Subnets #####
+  PublicSubnetARouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        Ref: 'PublicRouteTable'
+      SubnetId:
+        Ref: 'PublicSubnetA'
+  PublicSubnetBRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        Ref: 'PublicRouteTable'
+      SubnetId:
+        Ref: 'PublicSubnetB'
+
+
+  ##### vpc endpoint for S3 #####
+  S3VPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          -
+            Effect: 'Allow'
+            Principal: '*'
+            Action:
+              - 's3:*'
+            Resource: '*'
+      RouteTableIds:
+        - !Ref 'PrivateRouteTable1A'
+        - !Ref 'PrivateRouteTable1B'
+        - !Ref 'PrivateRouteTable2A'
+        - !Ref 'PrivateRouteTable2B'
+      ServiceName: !Join [ '', [ 'com.amazonaws.', Ref: 'AWS::Region', '.s3' ] ]
+      VpcId: !Ref 'VPC'
+
+
+  ##### security group #####
+  # public
+  ELBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'ELBSecurityGroup'
+      SecurityGroupIngress:
+        -
+          IpProtocol: 'tcp'
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: '0.0.0.0/0'
+        -
+          IpProtocol: 'tcp'
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: '0.0.0.0/0'
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-public-web-elb'
+      VpcId:
+        Ref: 'VPC'
+  PrivateSecurityGroup1:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'PublicSecurityGroup'
+      SecurityGroupIngress:
+        -
+          IpProtocol: 'tcp'
+          FromPort: '80'
+          ToPort: '80'
+          SourceSecurityGroupId:
+            Ref: ELBSecurityGroup
+        -
+          IpProtocol: 'tcp'
+          FromPort: '443'
+          ToPort: '443'
+          SourceSecurityGroupId:
+            Ref: ELBSecurityGroup
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-private-web'
+      VpcId:
+        Ref: 'VPC'
+
+##### output resource to another stack #####
+Outputs:
+  VPC:
+    Value:
+      Ref: 'VPC'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-VPC'
+  PublicSubnetA:
+    Value:
+      Ref: 'PublicSubnetA'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PublicSubnetA'
+  PublicSubnetB:
+    Value:
+      Ref: 'PublicSubnetB'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PublicSubnetB'
+  PrivateSubnet1A:
+    Value:
+      Ref: 'PrivateSubnet1A'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSubnet1A'
+  PrivateSubnet1B:
+    Value:
+      Ref: 'PrivateSubnet1B'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSubnet1B'
+  PrivateSubnet2A:
+    Value:
+      Ref: 'PrivateSubnet2A'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSubnet2A'
+  PrivateSubnet2B:
+    Value:
+      Ref: 'PrivateSubnet2B'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSubnet2B'
+  NatSubnetA:
+    Value:
+      Ref: 'NatSubnetA'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-NatSubnetA'
+  NatSubnetB:
+    Value:
+      Ref: 'NatSubnetB'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-NatSubnetB'
+  PublicRouteTable:
+    Value:
+      Ref: 'PublicRouteTable'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PublicRouteTable'
+  PrivateRouteTable1A:
+    Value:
+      Ref: 'PrivateRouteTable1A'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateRouteTable1A'
+  PrivateRouteTable1B:
+    Value:
+      Ref: 'PrivateRouteTable1B'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateRouteTable1B'
+  PrivateRouteTable2A:
+    Value:
+      Ref: 'PrivateRouteTable2A'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateRouteTable2A'
+  PrivateRouteTable2B:
+    Value:
+      Ref: 'PrivateRouteTable2B'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateRouteTable2B'
+  NatRouteTableA:
+    Value:
+      Ref: 'NatRouteTableA'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-NatRouteTableA'
+  NatRouteTableB:
+    Value:
+      Ref: 'NatRouteTableB'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-NatRouteTableB'
+  ELBSecurityGroup:
+    Value:
+      Ref: 'ELBSecurityGroup'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-ELBSecurityGroup'
+  PrivateSecurityGroup1:
+    Value:
+      Ref: 'PrivateSecurityGroup1'
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup1'
