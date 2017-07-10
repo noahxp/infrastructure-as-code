@@ -1,0 +1,60 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'private subnet-1 over natgateway'
+
+# environment type & bash parameters
+Parameters:
+  ParentStack:
+    Type: String
+    Description: 'Parent VPC Stack Name'
+
+  EnvType:
+    Type: String
+    Description: 'Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+
+### create resource ###
+Resources:
+  ##### add route rule to Route Table #####
+  PrivateRoute1A:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-NatGatewayA'
+      RouteTableId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateRouteTable1A'
+
+  PrivateRoute1B:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-NatGatewayB'
+      RouteTableId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateRouteTable1B'
+
+  ##### association Route Table to Subnets #####
+  # association route table to nat subnet a
+  PrivateSubnet1ARouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateRouteTable1A'
+      SubnetId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1A'
+
+  # association route table to nat subnet b
+  PrivateSubnet1BRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateRouteTable1B'
+      SubnetId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1B'
