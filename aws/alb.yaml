@@ -1,0 +1,217 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+    Application Load Balancer,Security Group for Http/Https protocol
+
+Parameters:
+  ParentStack:
+    Type: String
+    Description: 'Parent VPC Stack Name'
+
+  EnvType:
+    Type: String
+    Description: 'Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+  PrivateSubnet1CreateSecurityGroup:
+    Type: String
+    AllowedValues: ["yes", "no"]
+    Description: select yes to create private subnet 1 security group.
+    Default: "no"
+
+  PrivateSubnet2CreateSecurityGroup:
+    Type: String
+    AllowedValues: ["yes", "no"]
+    Description: select yes to create private subnet 2 security group.
+    Default: "no"
+
+  PrivateSubnet1forECS:
+    Type: String
+    AllowedValues: ["yes", "no"]
+    Description: select yes the private subnet layer 1 is for ECS Cluster.
+    Default: "no"
+
+  PrivateSubnet2forECS:
+    Type: String
+    AllowedValues: ["yes", "no"]
+    Description: select yes the private subnet layer 2 is for ECS Cluster.
+    Default: "no"
+
+Conditions:
+  PrivateSubnet1CreateSecurityGroupCond: !Equals [ !Ref PrivateSubnet1CreateSecurityGroup, "yes" ]
+  PrivateSubnet2CreateSecurityGroupCond: !Equals [ !Ref PrivateSubnet2CreateSecurityGroup, "yes" ]
+  PrivateSubnet1forECSCond: !Equals [ !Ref PrivateSubnet1forECS, "yes" ]
+  PrivateSubnet2forECSCond: !Equals [ !Ref PrivateSubnet2forECS, "yes" ]
+
+Resources:
+
+  ##### security group #####
+  # public
+  ELBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'ELBSecurityGroup'
+      SecurityGroupIngress:
+        -
+          IpProtocol: 'tcp'
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: '0.0.0.0/0'
+        -
+          IpProtocol: 'tcp'
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: '0.0.0.0/0'
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-public-web-elb'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
+
+  PrivateSecurityGroup1:
+    Condition: PrivateSubnet1CreateSecurityGroupCond
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'PrivateSecurityGroup1'
+      SecurityGroupIngress:
+        !If
+        - PrivateSubnet1forECSCond
+        -
+          -
+            IpProtocol: 'tcp'
+            FromPort: '0'
+            ToPort: '65535'
+            SourceSecurityGroupId:
+              Ref: ELBSecurityGroup
+        -
+          -
+            IpProtocol: 'tcp'
+            FromPort: '80'
+            ToPort: '80'
+            SourceSecurityGroupId:
+              Ref: ELBSecurityGroup
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-private-1'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
+
+  PrivateSecurityGroup2:
+    Condition: PrivateSubnet2CreateSecurityGroupCond
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'PrivateSecurityGroup2'
+      SecurityGroupIngress:
+        !If
+        - PrivateSubnet2forECSCond
+        -
+          -
+            IpProtocol: 'tcp'
+            FromPort: '0'
+            ToPort: '65535'
+            SourceSecurityGroupId:
+              Ref: ELBSecurityGroup
+        -
+          -
+            IpProtocol: 'tcp'
+            FromPort: '80'
+            ToPort: '80'
+            SourceSecurityGroupId:
+              Ref: ELBSecurityGroup
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-private-2'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
+
+
+  ApplicationLoadBalancer:
+      Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+      Properties:
+          Name: !Sub '${AWS::StackName}-${EnvType}-ALB'
+          Subnets:
+            - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
+            - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetB'
+          SecurityGroups:
+            - !Ref ELBSecurityGroup
+          Tags:
+              - Key: Name
+                Value: !Sub '${ParentStack}-${EnvType}-ALB'
+
+  ApplicationLoadBalancerListener:
+      Type: AWS::ElasticLoadBalancingV2::Listener
+      Properties:
+          LoadBalancerArn: !Ref ApplicationLoadBalancer
+          Port: 80
+          Protocol: HTTP
+          DefaultActions:
+            - Type: forward
+              TargetGroupArn: !Ref ApplicationLoadBalancerTargetGroup
+
+
+  ApplicationLoadBalancerTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckPath: '/'
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: 200-299
+      Port: 80
+      Protocol: HTTP
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
+      Tags:
+          - Key: Name
+            Value: !Sub '${ParentStack}-${EnvType}-ALB-TG'
+
+
+
+  # LoadBalancerHttpListenerRule:
+  #   Type: AWS::ElasticLoadBalancingV2::ListenerRule
+  #   Properties:
+  #       ListenerArn: !Ref ApplicationLoadBalancerListener
+  #       Priority: 1
+  #       Conditions:
+  #           - Field: path-pattern
+  #             Values:
+  #               - !Sub '/php/*'
+  #           - Field: path-pattern
+  #             Values:
+  #               - !Sub '/'
+  #           # - - Field: host-header
+  #           #     Values:
+  #           #     - !Ref LoadBalancerHostPattern
+  #           #   - Field: path-pattern
+  #           #     Values:
+  #           #     - !Sub '/${LoadBalancerPath}/*'
+  #           # - - Field: path-pattern
+  #           #     Values:
+  #           #     - !Sub '/${LoadBalancerPath}/*'
+  #       Actions:
+  #           - TargetGroupArn: !Ref ApplicationLoadBalancerTargetGroup
+  #             Type: forward
+
+
+
+Outputs:
+    ApplicationLoadBalancer:
+        Value: !Ref ApplicationLoadBalancer
+        Export:
+          Name: !Sub '${AWS::StackName}-${EnvType}-ALB'
+
+    ApplicationLoadBalancerUrl:
+        Value: !GetAtt ApplicationLoadBalancer.DNSName
+        Export:
+          Name: !Sub '${AWS::StackName}-${EnvType}-ALB-URL'
