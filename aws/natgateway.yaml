@@ -18,20 +18,20 @@ Parameters:
       - 'stag'
       - 'dev'
 
-  PrivateSubnet1OverNatgateway:
+  PrivateSubnet1UsingNatgateway:
     Type: String
     AllowedValues: ["yes", "no"]
-    Description: select yes if private subnet layer 1 over natgateway to internet.
+    Description: select yes if private subnet layer 1 using natgateway to internet.
     Default: "no"
-  PrivateSubnet2OverNatgateway:
+  PrivateSubnet2UsingNatgateway:
     Type: String
     AllowedValues: ["yes", "no"]
-    Description: select yes if private subnet layer 2 over natgateway to internet.
+    Description: select yes if private subnet layer 2 using natgateway to internet.
     Default: "no"
 
 Conditions:
-  PrivateSubnet1OverNatgatewayCondition: !Equals [ !Ref PrivateSubnet1OverNatgateway, "yes" ]
-  PrivateSubnet2OverNatgatewayCondition: !Equals [ !Ref PrivateSubnet2OverNatgateway, "yes" ]
+  PrivateSubnet1UsingNatgatewayCondition: !Equals [ !Ref PrivateSubnet1UsingNatgateway, "yes" ]
+  PrivateSubnet2UsingNatgatewayCondition: !Equals [ !Ref PrivateSubnet2UsingNatgateway, "yes" ]
 
 
 ### create resource ###
@@ -84,7 +84,7 @@ Resources:
         'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-NatRouteTableB'
 
   PrivateRoute1A:
-    Condition: PrivateSubnet1OverNatgatewayCondition
+    Condition: PrivateSubnet1UsingNatgatewayCondition
     Type: 'AWS::EC2::Route'
     Properties:
       DestinationCidrBlock: '0.0.0.0/0'
@@ -93,7 +93,7 @@ Resources:
         'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateRouteTable1A'
 
   PrivateRoute1B:
-    Condition: PrivateSubnet1OverNatgatewayCondition
+    Condition: PrivateSubnet1UsingNatgatewayCondition
     Type: 'AWS::EC2::Route'
     Properties:
       DestinationCidrBlock: '0.0.0.0/0'
@@ -103,7 +103,7 @@ Resources:
 
 
   PrivateRoute2A:
-    Condition: PrivateSubnet2OverNatgatewayCondition
+    Condition: PrivateSubnet2UsingNatgatewayCondition
     Type: 'AWS::EC2::Route'
     Properties:
       DestinationCidrBlock: '0.0.0.0/0'
@@ -112,7 +112,7 @@ Resources:
         'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateRouteTable2A'
 
   PrivateRoute2B:
-    Condition: PrivateSubnet2OverNatgatewayCondition
+    Condition: PrivateSubnet2UsingNatgatewayCondition
     Type: 'AWS::EC2::Route'
     Properties:
       DestinationCidrBlock: '0.0.0.0/0'
@@ -143,7 +143,7 @@ Resources:
 
   # association route table to private subnet 1a
   PrivateSubnet1ARouteTableAssociation:
-    Condition: PrivateSubnet1OverNatgatewayCondition
+    Condition: PrivateSubnet1UsingNatgatewayCondition
     Type: 'AWS::EC2::SubnetRouteTableAssociation'
     Properties:
       RouteTableId:
@@ -153,7 +153,7 @@ Resources:
 
   # association route table to private subnet 1b
   PrivateSubnet1BRouteTableAssociation:
-    Condition: PrivateSubnet1OverNatgatewayCondition
+    Condition: PrivateSubnet1UsingNatgatewayCondition
     Type: 'AWS::EC2::SubnetRouteTableAssociation'
     Properties:
       RouteTableId:
@@ -163,7 +163,7 @@ Resources:
 
   # association route table to private subnet 2a
   PrivateSubnet2ARouteTableAssociation:
-    Condition: PrivateSubnet2OverNatgatewayCondition
+    Condition: PrivateSubnet2UsingNatgatewayCondition
     Type: 'AWS::EC2::SubnetRouteTableAssociation'
     Properties:
       RouteTableId:
@@ -173,7 +173,7 @@ Resources:
 
   # association route table to private subnet 1b
   PrivateSubnet2BRouteTableAssociation:
-    Condition: PrivateSubnet2OverNatgatewayCondition
+    Condition: PrivateSubnet2UsingNatgatewayCondition
     Type: 'AWS::EC2::SubnetRouteTableAssociation'
     Properties:
       RouteTableId:
@@ -193,13 +193,13 @@ Outputs:
       Ref: 'NatGatewayB'
     Export:
       Name: !Sub '${ParentStack}-${EnvType}-NatGatewayB'
-  PrivateSubnet1OverNatgateway:
+  PrivateSubnet1UsingNatgateway:
     Value:
-      Ref: 'PrivateSubnet1OverNatgateway'
+      Ref: 'PrivateSubnet1UsingNatgateway'
     Export:
-      Name: !Sub '${ParentStack}-${EnvType}-PrivateSubnet1OverNatgateway'
-  PrivateSubnet2OverNatgateway:
+      Name: !Sub '${ParentStack}-${EnvType}-PrivateSubnet1UsingNatgateway'
+  PrivateSubnet2UsingNatgateway:
     Value:
-      Ref: 'PrivateSubnet2OverNatgateway'
+      Ref: 'PrivateSubnet2UsingNatgateway'
     Export:
-      Name: !Sub '${ParentStack}-${EnvType}-PrivateSubnet2OverNatgateway'
+      Name: !Sub '${ParentStack}-${EnvType}-PrivateSubnet2UsingNatgateway'
