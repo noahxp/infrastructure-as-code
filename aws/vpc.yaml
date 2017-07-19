@@ -3,7 +3,7 @@
 ## Function reference : http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference.html
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS Basic infrastructure, one vpc, 2 public subnet , 4 private subnet , security group 80/443 for elb/first layer private subnet, vpc-endpoint'
+Description: 'AWS Basic infrastructure, one vpc, 2 public subnet , 4 private subnet , vpc-endpoint'
 
 # environment type & bash parameters
 Parameters:
@@ -16,15 +16,6 @@ Parameters:
       - 'prod'
       - 'stag'
       - 'dev'
-  PrivateSecurityGroup1GrantAnywhere:
-    Type: String
-    AllowedValues: ["yes", "no"]
-    Description: select yes if private subnet layer 1 grant anywhere http/https, if no only from elb http/https source.
-    Default: "no"
-
-
-Conditions:
-  PrivateSecurityGroup1GrantAnywhereCondition: !Equals [ !Ref PrivateSecurityGroup1GrantAnywhere, "yes" ]
 
 # parameters for env-type
 Mappings:
@@ -339,70 +330,33 @@ Resources:
       VpcId: !Ref 'VPC'
 
 
-  ##### security group #####
-  # public
-  ELBSecurityGroup:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'ELBSecurityGroup'
-      SecurityGroupIngress:
-        -
-          IpProtocol: 'tcp'
-          FromPort: '80'
-          ToPort: '80'
-          CidrIp: '0.0.0.0/0'
-        -
-          IpProtocol: 'tcp'
-          FromPort: '443'
-          ToPort: '443'
-          CidrIp: '0.0.0.0/0'
-      Tags:
-        -
-          Key: Name
-          Value: !Sub '${EnvType}-public-web-elb'
-      VpcId:
-        Ref: 'VPC'
-  PrivateSecurityGroup1:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: 'PublicSecurityGroup'
-      SecurityGroupIngress:
-        !If
-        - PrivateSecurityGroup1GrantAnywhereCondition
-        -
-          -
-            IpProtocol: 'tcp'
-            FromPort: '80'
-            ToPort: '80'
-            CidrIp: '0.0.0.0/0'
-          -
-            IpProtocol: 'tcp'
-            FromPort: '443'
-            ToPort: '443'
-            CidrIp: '0.0.0.0/0'
-        -
-          -
-            IpProtocol: 'tcp'
-            FromPort: '80'
-            ToPort: '80'
-            SourceSecurityGroupId:
-              Ref: ELBSecurityGroup
-          -
-            IpProtocol: 'tcp'
-            FromPort: '443'
-            ToPort: '443'
-            SourceSecurityGroupId:
-              Ref: ELBSecurityGroup
-      Tags:
-        -
-          Key: Name
-          Value: !Sub '${EnvType}-private-web'
-      VpcId:
-        Ref: 'VPC'
-  # PrivateSecurityGroup1:
+  # ##### security group #####
+  # # public
+  # ELBSecurityGroup:
   #   Type: 'AWS::EC2::SecurityGroup'
   #   Properties:
-  #     GroupDescription: 'PublicSecurityGroup'
+  #     GroupDescription: 'ELBSecurityGroup'
+  #     SecurityGroupIngress:
+  #       -
+  #         IpProtocol: 'tcp'
+  #         FromPort: '80'
+  #         ToPort: '80'
+  #         CidrIp: '0.0.0.0/0'
+  #       -
+  #         IpProtocol: 'tcp'
+  #         FromPort: '443'
+  #         ToPort: '443'
+  #         CidrIp: '0.0.0.0/0'
+  #     Tags:
+  #       -
+  #         Key: Name
+  #         Value: !Sub '${EnvType}-public-web-elb'
+  #     VpcId:
+  #       Ref: 'VPC'
+  # PrivateSecurityGroup1Http80:
+  #   Type: 'AWS::EC2::SecurityGroup'
+  #   Properties:
+  #     GroupDescription: 'PrivateSecurityGroup1Http80'
   #     SecurityGroupIngress:
   #       -
   #         IpProtocol: 'tcp'
@@ -410,26 +364,27 @@ Resources:
   #         ToPort: '80'
   #         SourceSecurityGroupId:
   #           Ref: ELBSecurityGroup
-  #       -
-  #         IpProtocol: 'tcp'
-  #         FromPort: '443'
-  #         ToPort: '443'
-  #         SourceSecurityGroupId:
-  #           Ref: ELBSecurityGroup
   #     Tags:
   #       -
   #         Key: Name
-  #         Value: !Sub '${EnvType}-private-web'
+  #         Value: !Sub '${EnvType}-private-web-http-80'
   #     VpcId:
   #       Ref: 'VPC'
 
+
 ##### output resource to another stack #####
 Outputs:
+  EnvType:
+    Value: !Sub '${EnvType}'
+    Export:
+      Name: !Sub '${AWS::StackName}-EnvType'
+    Description: 'Important Value for child stack.'
   VPC:
     Value:
       Ref: 'VPC'
     Export:
       Name: !Sub '${AWS::StackName}-${EnvType}-VPC'
+    Description: 'Important Value for child stack.'
   PublicSubnetA:
     Value:
       Ref: 'PublicSubnetA'
@@ -505,18 +460,13 @@ Outputs:
       Ref: 'NatRouteTableB'
     Export:
       Name: !Sub '${AWS::StackName}-${EnvType}-NatRouteTableB'
-  ELBSecurityGroup:
-    Value:
-      Ref: 'ELBSecurityGroup'
-    Export:
-      Name: !Sub '${AWS::StackName}-${EnvType}-ELBSecurityGroup'
-  PrivateSecurityGroup1:
-    Value:
-      Ref: 'PrivateSecurityGroup1'
-    Export:
-      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup1'
-  PrivateSecurityGroup1GrantAnywhere:
-    Value:
-      Ref: 'PrivateSecurityGroup1GrantAnywhere'
-    Export:
-      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup1GrantAnywhere'
+  # ELBSecurityGroup:
+  #   Value:
+  #     Ref: 'ELBSecurityGroup'
+  #   Export:
+  #     Name: !Sub '${AWS::StackName}-${EnvType}-ELBSecurityGroup'
+  # PrivateSecurityGroup1Http80:
+  #   Value:
+  #     Ref: 'PrivateSecurityGroup1Http80'
+  #   Export:
+  #     Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup1Http80'
