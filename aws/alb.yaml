@@ -1,6 +1,6 @@
 
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >
+Description: > 
     Application Load Balancer,Security Group for Http/Https protocol
 
 Parameters:
