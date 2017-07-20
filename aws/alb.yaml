@@ -21,25 +21,25 @@ Parameters:
   PrivateSubnet1CreateSecurityGroup:
     Type: String
     AllowedValues: ["yes", "no"]
-    Description: select yes to create private subnet 1 security group.
+    Description: select yes to create private subnet 1 http/https security group from ELB traffic.
     Default: "no"
 
   PrivateSubnet2CreateSecurityGroup:
     Type: String
     AllowedValues: ["yes", "no"]
-    Description: select yes to create private subnet 2 security group.
+    Description: select yes to create private subnet 2 http/https security group from ELB traffic.
     Default: "no"
 
   PrivateSubnet1forECS:
     Type: String
     AllowedValues: ["yes", "no"]
-    Description: select yes the private subnet layer 1 is for ECS Cluster.
+    Description: select yes the private subnet layer 1 is for ECS Cluster, else only 80 port to private subnet 1.
     Default: "no"
 
   PrivateSubnet2forECS:
     Type: String
     AllowedValues: ["yes", "no"]
-    Description: select yes the private subnet layer 2 is for ECS Cluster.
+    Description: select yes the private subnet layer 2 is for ECS Cluster, else only 80 port to private subnet 2.
     Default: "no"
 
 Conditions:
@@ -212,6 +212,7 @@ Outputs:
           Name: !Sub '${AWS::StackName}-${EnvType}-ALB'
 
     ApplicationLoadBalancerUrl:
-        Value: !GetAtt ApplicationLoadBalancer.DNSName
+        # Value: !GetAtt http://ApplicationLoadBalancer.DNSName
+        Value: !Sub http://${ApplicationLoadBalancer.DNSName}
         Export:
           Name: !Sub '${AWS::StackName}-${EnvType}-ALB-URL'
