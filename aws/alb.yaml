@@ -1,6 +1,6 @@
 
 AWSTemplateFormatVersion: '2010-09-09'
-Description: > 
+Description: >
     Application Load Balancer,Security Group for Http/Https protocol
 
 Parameters:
@@ -207,12 +207,29 @@ Resources:
 
 Outputs:
     ApplicationLoadBalancer:
-        Value: !Ref ApplicationLoadBalancer
-        Export:
-          Name: !Sub '${AWS::StackName}-${EnvType}-ALB'
+      Value: !Ref ApplicationLoadBalancer
+      Export:
+        Name: !Sub '${AWS::StackName}-${EnvType}-ALB'
 
     ApplicationLoadBalancerUrl:
-        # Value: !GetAtt http://ApplicationLoadBalancer.DNSName
-        Value: !Sub http://${ApplicationLoadBalancer.DNSName}
-        Export:
-          Name: !Sub '${AWS::StackName}-${EnvType}-ALB-URL'
+      # Value: !GetAtt http://ApplicationLoadBalancer.DNSName
+      Value: !Sub http://${ApplicationLoadBalancer.DNSName}
+      Export:
+        Name: !Sub '${AWS::StackName}-${EnvType}-ALB-URL'
+
+    ApplicationLoadBalancerTargetGroup:
+      Value: !Ref ApplicationLoadBalancerTargetGroup
+      Export:
+        Name: !Sub '${AWS::StackName}-${EnvType}-ALB-TG'
+
+    PrivateSecurityGroup1:
+      Condition: PrivateSubnet1CreateSecurityGroupCond
+      Value: !Ref PrivateSecurityGroup1
+      Export:
+        Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup1'
+
+    PrivateSecurityGroup2:
+      Condition: PrivateSubnet2CreateSecurityGroupCond
+      Value: !Ref PrivateSecurityGroup2
+      Export:
+        Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup2'
