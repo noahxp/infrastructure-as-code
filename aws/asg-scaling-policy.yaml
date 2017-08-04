@@ -1,0 +1,166 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ScalingPolicy of AutoScalingGroup'
+
+# environment type & bash parameters
+Parameters:
+  ParentStack:
+    Type: String
+    Description: 'Parent VPC Stack Name'
+    Default: ''
+
+  EnvType:
+    Type: String
+    Description: 'Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+  AsgStack:
+    Type: String
+    Description: 'Parent Auto Scaling Group Stack Name'
+    Default: ''
+
+  ScalingCooldown:
+    Type: String
+    Description: 'The amount of time, in seconds, after a scaling activity completes before any further trigger-related scaling activities can start.'
+
+  PolicyType:
+    Type: String
+    Description: 'An Auto Scaling policy type'
+    Default: 'SimpleScaling'
+    AllowedValues:
+      - 'SimpleScaling'
+      - 'StepScaling'
+
+
+Conditions:
+  SimpleScalingCond: !Equals [ !Ref PolicyType, 'SimpleScaling' ]
+  StepScalingCond:   !Equals [ !Ref PolicyType, 'StepScaling'   ]
+
+Resources:
+
+  ##### Simple Scaling #####
+  SimpleScalingUp:
+    Condition: SimpleScalingCond
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: 'ChangeInCapacity'
+      PolicyType: 'SimpleScaling'
+      Cooldown: !Sub '${ScalingCooldown}'
+      AutoScalingGroupName:
+        'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
+      ScalingAdjustment: 1
+
+  SimpleScalingDown:
+    Condition: SimpleScalingCond
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: 'ChangeInCapacity'
+      PolicyType: 'SimpleScaling'
+      Cooldown: !Sub '${ScalingCooldown}'
+      AutoScalingGroupName:
+        'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
+      ScalingAdjustment: -1
+
+  ##### Step Scaling #####
+  StepScalingUp:
+    Condition: StepScalingCond
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: 'ChangeInCapacity'
+      AutoScalingGroupName:
+        'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
+      PolicyType: 'StepScaling'
+      MetricAggregationType: 'Average'
+      EstimatedInstanceWarmup: !Sub '${ScalingCooldown}'
+      # StepAdjustments must reference the Alarm Threshold
+      StepAdjustments:
+        -
+          MetricIntervalLowerBound: 0
+          MetricIntervalUpperBound: 20
+          ScalingAdjustment: 1
+        -
+          MetricIntervalLowerBound: 20
+          ScalingAdjustment: 2
+
+  StepScalingDown:
+    Condition: StepScalingCond
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: 'ChangeInCapacity'
+      AutoScalingGroupName:
+        'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
+      PolicyType: 'StepScaling'
+      MetricAggregationType: 'Average'
+      EstimatedInstanceWarmup: !Sub '${ScalingCooldown}'
+      # StepAdjustments must reference the Alarm Threshold
+      StepAdjustments:
+        -
+          MetricIntervalLowerBound: 0
+          ScalingAdjustment: -1
+
+
+  ##### CPU Alarm #####
+  CPUAlarmHigh:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: 'Average'
+      Threshold: '70'
+      AlarmDescription: 'Alarm if CPU too high or metric disappears indicating instance is down'
+      Period: '180'
+      AlarmActions:
+        !If
+        - SimpleScalingCond
+        -
+          - Ref: SimpleScalingUp
+        -
+          - Ref: StepScalingUp
+      Namespace: 'AWS/EC2'
+      Dimensions:
+      - Name: 'AutoScalingGroupName'
+        Value:
+          'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
+      ComparisonOperator: 'GreaterThanOrEqualToThreshold'
+      MetricName: 'CPUUtilization'
+
+  CPUAlarmLow:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: 'Average'
+      Threshold: '30'
+      AlarmDescription: 'Alarm if CPU too low or metric disappears indicating instance is down'
+      Period: '180'
+      AlarmActions:
+        !If
+        - SimpleScalingCond
+        -
+          - Ref: SimpleScalingDown
+        -
+          - Ref: StepScalingDown
+        # - Ref: SimpleScalingDown
+      Namespace: 'AWS/EC2'
+      Dimensions:
+      - Name: 'AutoScalingGroupName'
+        Value:
+          'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
+      ComparisonOperator: 'LessThanOrEqualToThreshold'
+      MetricName: 'CPUUtilization'
+
+
+
+  # AsgScheduledAction:
+  #   Type: 'AWS::AutoScaling::ScheduledAction'
+  #   Properties:
+  #     AutoScalingGroupName: !Sub '${AsgStack}'
+  #     DesiredCapacity: Integer
+  #     EndTime: Time stamp
+  #     MaxSize: Integer
+  #     MinSize: Integer
+  #     Recurrence: String
+  #     StartTime: Time stamp
