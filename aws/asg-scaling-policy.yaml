@@ -28,18 +28,28 @@ Parameters:
     Type: String
     Description: 'The amount of time, in seconds, after a scaling activity completes before any further trigger-related scaling activities can start.'
 
-  PolicyType:
+  ScalingPolicy:
     Type: String
     Description: 'An Auto Scaling policy type'
     Default: 'SimpleScaling'
     AllowedValues:
+      - 'None'
       - 'SimpleScaling'
       - 'StepScaling'
 
+  ScheduledAction:
+    Type: String
+    Description: 'A scheduled scaling action'
+    Default: 'None'
+    AllowedValues:
+      - 'None'
+      - 'Yes'
 
 Conditions:
-  SimpleScalingCond: !Equals [ !Ref PolicyType, 'SimpleScaling' ]
-  StepScalingCond:   !Equals [ !Ref PolicyType, 'StepScaling'   ]
+  HasScalingPolicyCond: !Not [ !Equals [ !Ref ScalingPolicy, 'None' ] ]
+  SimpleScalingCond: !Equals [ !Ref ScalingPolicy, 'SimpleScaling' ]
+  StepScalingCond:   !Equals [ !Ref ScalingPolicy, 'StepScaling'   ]
+
 
 Resources:
 
@@ -106,6 +116,7 @@ Resources:
 
   ##### CPU Alarm #####
   CPUAlarmHigh:
+    Condition: HasScalingPolicyCond
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
       EvaluationPeriods: '1'
@@ -129,6 +140,7 @@ Resources:
       MetricName: 'CPUUtilization'
 
   CPUAlarmLow:
+    Condition: HasScalingPolicyCond
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
       EvaluationPeriods: '1'
@@ -153,14 +165,20 @@ Resources:
       MetricName: 'CPUUtilization'
 
 
-
-  # AsgScheduledAction:
-  #   Type: 'AWS::AutoScaling::ScheduledAction'
-  #   Properties:
-  #     AutoScalingGroupName: !Sub '${AsgStack}'
-  #     DesiredCapacity: Integer
-  #     EndTime: Time stamp
-  #     MaxSize: Integer
-  #     MinSize: Integer
-  #     Recurrence: String
-  #     StartTime: Time stamp
+  ##### Scheduled Action #####
+  ScheduledActionUp:
+    Type: AWS::AutoScaling::ScheduledAction
+    Properties:
+      AutoScalingGroupName:
+        'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
+      MaxSize: '1'
+      MinSize: '1'
+      Recurrence: 0 9 * * MON-FRI
+  ScheduledActionDown:
+    Type: AWS::AutoScaling::ScheduledAction
+    Properties:
+      AutoScalingGroupName:
+        'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
+      MaxSize: '0'
+      MinSize: '0'
+      Recurrence: 50 18 * * MON-FRI
