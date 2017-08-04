@@ -7,7 +7,7 @@ Parameters:
   ParentStack:
     Type: String
     Description: 'Parent VPC Stack Name'
-    Default: 'noah-tw'
+    Default: ''
 
   EnvType:
     Type: String
@@ -53,7 +53,7 @@ Parameters:
   ALBStackName:
     Type: String
     Description: 'using Application Load Balancer with ALB Name'
-    Default: 'noah-tw-ecs-alb'
+    Default: ''
 
   CLBStackName:
     Type: String
@@ -103,11 +103,8 @@ Resources:
           -
             - 'Fn::ImportValue': !Sub '${CLBStackName}-${EnvType}-CLB'
           - !Ref "AWS::NoValue"
-          # - 'Fn::ImportValue': !Sub '${ALBStackName}-${EnvType}-ALB'
-          # - Ref: 'noah-tw-ecs-alb-dev-ALB'
         # TargetGroupARNs for ALB
         TargetGroupARNs:
-          # - 'arn:aws:elasticloadbalancing:ap-northeast-1:796957138374:targetgroup/noah-Appli-10RJZ5XE71XGQ/35d9457f7aa145fb'
           !If
           - ALBCond
           -
@@ -116,17 +113,6 @@ Resources:
         MaxSize: !Sub '${MaxSize}'
         MinSize: !Sub '${MinSize}'
         DesiredCapacity: !Sub '${DesiredCapacity}'
-        # MetricsCollection:
-        #   -
-        #     Granularity: "1Minute"
-        #     Metrics:
-        #       - "GroupMinSize"
-        #       - "GroupMaxSize"
-        # NotificationConfigurations:
-        #   - NotificationConfigurations
-        # PlacementGroup: String
-        # TerminationPolicies:
-        #   - String
         VPCZoneIdentifier:
           - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1A'
           - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet2B'
