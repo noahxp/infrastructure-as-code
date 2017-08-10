@@ -1,6 +1,6 @@
 
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AutoScalingGroup & LaunchConfiguration'
+Description: 'AutoScalingGroup & LaunchConfiguration , EC2 IAM Role'
 
 # environment type & bash parameters
 Parameters:
@@ -68,6 +68,14 @@ Parameters:
       - 'PrivateSecurityGroup1'
       - 'PrivateSecurityGroup2'
 
+  HealthCheckType:
+    Type: String
+    Description: 'health status from, Amazon EC2 or Elastic Load Balancer'
+    Default: 'EC2'
+    AllowedValues:
+      - 'EC2'
+      - 'ELB'
+
   EC2KeyPair:
     Type: String
     Description: 'The Bastion Server KeyPair'
@@ -86,68 +94,101 @@ Conditions:
 
 ##### create resource #####
 Resources:
-    Asg:
-      Type: AWS::AutoScaling::AutoScalingGroup
-      Properties:
-        Cooldown: '300'
-        DesiredCapacity: '0'
-        HealthCheckGracePeriod: 300
-        # ALB or EC2 , start with EC2, be sure to use ELB
-        HealthCheckType: 'EC2'
-        # InstanceId: !Sub 'Asg-${AWS::StackName}-'
-        LaunchConfigurationName: !Ref LaunchConfig
-        # LoadBalancerNames for CLB
-        LoadBalancerNames:
-          !If
-          - CLBCond
-          -
-            - 'Fn::ImportValue': !Sub '${CLBStackName}-${EnvType}-CLB'
-          - !Ref "AWS::NoValue"
-        # TargetGroupARNs for ALB
-        TargetGroupARNs:
-          !If
-          - ALBCond
-          -
-            - 'Fn::ImportValue': !Sub '${ALBStackName}-${EnvType}-ALB-TG'
-          - !Ref "AWS::NoValue"
-        MaxSize: !Sub '${MaxSize}'
-        MinSize: !Sub '${MinSize}'
-        DesiredCapacity: !Sub '${DesiredCapacity}'
-        VPCZoneIdentifier:
-          - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1A'
-          - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet2B'
-        Tags:
-          - PropagateAtLaunch: true
-            Key: Name
-            Value: !Sub '${AWS::StackName}-${ParentStack}-${EnvType}-Asg'
-            ResourceId: 'my-asg'
+  Asg:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      Cooldown: '300'
+      DesiredCapacity: '0'
+      HealthCheckGracePeriod: 300
+      # ALB or EC2 , start with EC2, be sure to use ELB
+      HealthCheckType: !Sub '${HealthCheckType}'
+      # InstanceId: !Sub 'Asg-${AWS::StackName}-'
+      LaunchConfigurationName: !Ref LaunchConfig
+      # LoadBalancerNames for CLB
+      LoadBalancerNames:
+        !If
+        - CLBCond
+        -
+          - 'Fn::ImportValue': !Sub '${CLBStackName}-${EnvType}-CLB'
+        - !Ref 'AWS::NoValue'
+      # TargetGroupARNs for ALB
+      TargetGroupARNs:
+        !If
+        - ALBCond
+        -
+          - 'Fn::ImportValue': !Sub '${ALBStackName}-${EnvType}-ALB-TG'
+        - !Ref 'AWS::NoValue'
+      MaxSize: !Sub '${MaxSize}'
+      MinSize: !Sub '${MinSize}'
+      DesiredCapacity: !Sub '${DesiredCapacity}'
+      VPCZoneIdentifier:
+        - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1A'
+        - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1B'
+      Tags:
+        - PropagateAtLaunch: true
+          Key: Name
+          Value: !Sub '${AWS::StackName}-${ParentStack}-${EnvType}-Asg'
+          # ResourceId: 'my-asg'
 
-    LaunchConfig:
-      Type: AWS::AutoScaling::LaunchConfiguration
-      Properties:
-        AssociatePublicIpAddress: false
-        BlockDeviceMappings:
-          - DeviceName: '/dev/xvda'
-            Ebs:
-              DeleteOnTermination: true
-              Encrypted: false
-              VolumeSize: 8
-              VolumeType: gp2
-        ImageId: !Sub '${AMIId}'
-        # InstanceId: 'asg-lc'
-        InstanceMonitoring: true
-        InstanceType: !Sub '${InstanceType}'
-        KeyName: !If [EC2KeyPairCond, !Ref EC2KeyPair, !Ref "AWS::NoValue"]
-        SecurityGroups:
-          - 'Fn::ImportValue': !Sub '${ALBStackName}-${EnvType}-${EC2SubnetPosition}'
-        SpotPrice: !If [SpotInstanceCond, !Ref SpotPrice, !Ref "AWS::NoValue"]
-        UserData:
-          'Fn::Base64': !Sub |
-             #!/bin/bash -x
-             sudo yum update -y
-             wget https://aws-codedeploy-ap-northeast-1.s3.amazonaws.com/latest/install
-             chmod +x ./install
-             sudo ./install auto
+  LaunchConfig:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      AssociatePublicIpAddress: false
+      # BlockDeviceMappings:
+      #   - DeviceName: '/dev/xvda'
+      #     Ebs:
+      #       DeleteOnTermination: true
+      #       Encrypted: false
+      #       VolumeSize: 8
+      #       VolumeType: gp2
+      IamInstanceProfile: !Ref InstanceProfile
+      ImageId: !Sub '${AMIId}'
+      # InstanceId: 'asg-lc'
+      InstanceMonitoring: true
+      InstanceType: !Sub '${InstanceType}'
+      KeyName: !If [EC2KeyPairCond, !Ref EC2KeyPair, !Ref 'AWS::NoValue']
+      SecurityGroups:
+        - 'Fn::ImportValue': !Sub '${ALBStackName}-${EnvType}-${EC2SubnetPosition}'
+      SpotPrice: !If [SpotInstanceCond, !Ref SpotPrice, !Ref 'AWS::NoValue']
+      UserData:
+        'Fn::Base64': !Sub |
+           #!/bin/bash -x
+           sudo yum update -y
+           wget https://aws-codedeploy-ap-northeast-1.s3.amazonaws.com/latest/install
+           chmod +x ./install
+           sudo ./install auto
+
+  InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: '/'
+      Roles:
+      - !Ref EC2Role
+
+  EC2Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      # RoleName: !Sub '${AWS::StackName}-${EnvType}-EC2Role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: 'Allow'
+            Principal:
+              Service: 'ec2.amazonaws.com'
+      Policies:
+        -
+          PolicyName: !Sub '${AWS::StackName}-${EnvType}-EC2CodeDeployPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: 'Allow'
+                Action:
+                  - 's3:GetObject'
+                  - 's3:GetObjectVersion'
+                  - 's3:ListBucket'
+                Resource: 'arn:aws:s3:::noah-deploy/*'
 
 
 Outputs:
@@ -155,3 +196,8 @@ Outputs:
     Value: !Ref Asg
     Export:
       Name: !Sub '${AWS::StackName}-${EnvType}-ASG'
+
+  EC2Role:
+    Value: !Ref EC2Role
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-EC2Role'
