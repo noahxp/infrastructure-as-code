@@ -1,0 +1,94 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CodeDeploy, CodeDeploy Service Role'
+
+# environment type & bash parameters
+Parameters:
+  ParentStack:
+    Type: String
+    Description: 'Parent VPC Stack Name'
+    Default: ''
+
+  EnvType:
+    Type: String
+    Description: 'Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+  AsgStack:
+    Type: String
+    Description: 'The first AutoScalingGroup Stack.'
+    Default: ''
+
+  AsgStack2:
+    Type: String
+    Description: 'The secondary AutoScalingGroup Stack.'
+    Default: ''
+
+
+Conditions:
+  AsgStackCond:  !Not [ !Equals [ !Ref AsgStack, '' ] ]
+  AsgStack2Cond: !Not [ !Equals [ !Ref AsgStack2, '' ] ]
+
+Resources:
+  CodeDeployApplication:
+    Type: "AWS::CodeDeploy::Application"
+    Properties:
+      ApplicationName: !Sub '${AWS::StackName}-${EnvType}-CodeDeploy'
+
+  CodeDeployGroup:
+    Type: "AWS::CodeDeploy::DeploymentGroup"
+    Properties:
+      DeploymentGroupName: !Sub '${AWS::StackName}-${EnvType}-DeploymentGroup'
+      # AlarmConfiguration:
+      #   AlarmConfiguration
+      ApplicationName: !Ref CodeDeployApplication
+      AutoScalingGroups:
+        -
+          !If
+          - AsgStackCond
+          - 'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
+          - !Ref "AWS::NoValue"
+        -
+          !If
+          - AsgStack2Cond
+          - 'Fn::ImportValue': !Sub '${AsgStack2}-${EnvType}-ASG'
+          - !Ref "AWS::NoValue"
+      # Deployment:
+      #   Description: "A sample deployment"
+      #   IgnoreApplicationStopFailures: false
+      #   S3Location:
+      #     Bucket: String
+      #     BundleType: String
+      #     ETag: String
+      #     Key: String
+      #     Version: String
+      DeploymentConfigName: "CodeDeployDefault.OneAtATime"
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+
+  CodeDeployServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: 'Allow'
+            Action: 'sts:AssumeRole'
+            Principal:
+              Service:
+                - 'codedeploy.us-east-1.amazonaws.com'
+                - 'codedeploy.us-west-1.amazonaws.com'
+                - 'codedeploy.us-west-2.amazonaws.com'
+                - 'codedeploy.eu-west-1.amazonaws.com'
+                - 'codedeploy.eu-central-1.amazonaws.com'
+                - 'codedeploy.ap-northeast-1.amazonaws.com'
+                - 'codedeploy.ap-southeast-1.amazonaws.com'
+                - 'codedeploy.ap-southeast-2.amazonaws.com'
+                - 'codedeploy.sa-east-1.amazonaws.com'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole'
