@@ -219,29 +219,29 @@ Resources:
 
 
 Outputs:
-    ApplicationLoadBalancer:
-      Value: !Ref ApplicationLoadBalancer
-      Export:
-        Name: !Sub '${AWS::StackName}-${EnvType}-ALB'
+  ApplicationLoadBalancer:
+    Value: !Ref ApplicationLoadBalancer
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-ALB'
 
-    ApplicationLoadBalancerUrl:
-      Value: !Sub http://${ApplicationLoadBalancer.DNSName}
-      Export:
-        Name: !Sub '${AWS::StackName}-${EnvType}-ALB-URL'
+  ApplicationLoadBalancerUrl:
+    Value: !Sub http://${ApplicationLoadBalancer.DNSName}
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-ALB-URL'
 
-    ApplicationLoadBalancerTargetGroup:
-      Value: !Ref ApplicationLoadBalancerTargetGroup
-      Export:
-        Name: !Sub '${AWS::StackName}-${EnvType}-ALB-TG'
+  ApplicationLoadBalancerTargetGroup:
+    Value: !Ref ApplicationLoadBalancerTargetGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-ALB-TG'
 
-    PrivateSecurityGroup1:
-      Condition: PrivateSubnet1CreateSecurityGroupCond
-      Value: !Ref PrivateSecurityGroup1
-      Export:
-        Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup1'
+  PrivateSecurityGroup1:
+    Condition: PrivateSubnet1CreateSecurityGroupCond
+    Value: !Ref PrivateSecurityGroup1
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup1'
 
-    PrivateSecurityGroup2:
-      Condition: PrivateSubnet2CreateSecurityGroupCond
-      Value: !Ref PrivateSecurityGroup2
-      Export:
-        Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup2'
+  PrivateSecurityGroup2:
+    Condition: PrivateSubnet2CreateSecurityGroupCond
+    Value: !Ref PrivateSecurityGroup2
+    Export:
+      Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup2'
