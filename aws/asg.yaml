@@ -6,12 +6,12 @@ Description: 'AutoScalingGroup & LaunchConfiguration , EC2 IAM Role'
 Parameters:
   ParentStack:
     Type: String
-    Description: 'Parent VPC Stack Name'
+    Description: '(*)Parent VPC Stack Name'
     Default: ''
 
   EnvType:
     Type: String
-    Description: 'Environment Type for this Stack.'
+    Description: '(*)Environment Type for this Stack.'
     ConstraintDescription: 'must specify prod, stag or dev.'
     Default: 'dev'
     AllowedValues:
@@ -19,29 +19,35 @@ Parameters:
       - 'stag'
       - 'dev'
 
+  SNSStack:
+    Type: String
+    Description: 'notification to slack'
+    AllowedValues: ['yes', 'no']
+    Default: 'no'
+
   MaxSize:
     Type: String
-    Description: 'The maximum size of the Auto Scaling group.'
-    Default: 10
+    Description: '(*)The maximum size of the Auto Scaling group.'
+    Default: 5
 
   MinSize:
     Type: String
-    Description: 'The minimum size of the Auto Scaling group.'
+    Description: '(*)The minimum size of the Auto Scaling group.'
     Default: 0
 
   DesiredCapacity:
     Type: String
-    Description: 'Specifies the desired capacity for the Auto Scaling group.'
+    Description: '(*)Specifies the desired capacity for the Auto Scaling group.'
     Default: 0
 
   AMIId:
     Type: String
-    Description: Provides the unique ID of the Amazon Machine Image (AMI) that was assigned during registration.
+    Description: '(*)Provides the unique ID of the Amazon Machine Image (AMI) that was assigned during registration.'
     Default: 'ami-3bd3c45c'
 
   InstanceType:
     Type: String
-    Description: 'Specifies the instance type of the EC2 instance'
+    Description: '(*)Specifies the instance type of the EC2 instance'
     ConstraintDescription: ''
     Default: 'm3.medium'
     AllowedValues:
@@ -62,7 +68,7 @@ Parameters:
 
   EC2SubnetPosition:
     Type: String
-    Description: 'web service subnet position'
+    Description: '(*)web service subnet position'
     Default: 'PrivateSecurityGroup1'
     AllowedValues:
       - 'PrivateSecurityGroup1'
@@ -70,7 +76,7 @@ Parameters:
 
   HealthCheckType:
     Type: String
-    Description: 'health status from, Amazon EC2 or Elastic Load Balancer'
+    Description: '(*)health check source, Amazon EC2 or Elastic Load Balancer'
     Default: 'EC2'
     AllowedValues:
       - 'EC2'
@@ -83,7 +89,7 @@ Parameters:
 
   SpotPrice:
     Type: Number
-    Description: '0 for On-Demand, else for Spot-Instance'
+    Description: '(*)0 for On-Demand, else for Spot-Instance'
     Default: '0.013'
 
 Conditions:
@@ -91,6 +97,7 @@ Conditions:
   SpotInstanceCond: !Not [ !Equals [ !Ref SpotPrice, 0 ] ]
   ALBCond: !Not [ !Equals [ !Ref ALBStackName, '' ] ]
   CLBCond: !Not [ !Equals [ !Ref CLBStackName, '' ] ]
+  SNSStackCond: !Equals [ !Ref SNSStack, 'yes' ]
 
 ##### create resource #####
 Resources:
@@ -121,6 +128,15 @@ Resources:
       MaxSize: !Sub '${MaxSize}'
       MinSize: !Sub '${MinSize}'
       DesiredCapacity: !Sub '${DesiredCapacity}'
+      NotificationConfigurations:
+        !If
+        - SNSStackCond
+        - - NotificationTypes:
+            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+            TopicARN:
+              'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-sns2slack'
+        - !Ref 'AWS::NoValue'
       VPCZoneIdentifier:
         - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1A'
         - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1B'
