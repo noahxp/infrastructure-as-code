@@ -1,0 +1,210 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'sns to slack'
+
+# environment type & bash parameters
+Parameters:
+  ParentStack:
+    Type: String
+    Description: '(*)Parent VPC Stack Name'
+
+  EnvType:
+    Type: String
+    Description: '(*)Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+
+Resources:
+  ##### security group for sns 2 slack #####
+  Sns2SlackSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Sns2SlackSecurityGroup'
+      # no rules.
+      # SecurityGroupIngress:
+      #   -
+      #     IpProtocol: 'tcp'
+      #     FromPort: '80'
+      #     ToPort: '80'
+      #     CidrIp: '0.0.0.0/0'
+      #   -
+      #     IpProtocol: 'tcp'
+      #     FromPort: '443'
+      #     ToPort: '443'
+      #     CidrIp: '0.0.0.0/0'
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-Sns2SlackSecurityGroup'
+      VpcId:
+        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
+
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      # RoleName: !Sub '${AWS::StackName}-${EnvType}-EC2Role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: 'Allow'
+            Principal:
+              Service: 'lambda.amazonaws.com'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        -
+          PolicyName: !Sub '${AWS::StackName}-${EnvType}-LambdaExecutionRole'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: 'Allow'
+                Action:
+                  - 'ec2:CreateNetworkInterface'
+                  - 'ec2:DescribeNetworkInterfaces'
+                  - 'ec2:DeleteNetworkInterface'
+                Resource: '*'
+
+  sns2slackFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        ZipFile: >-
+          'use strict';
+
+          var https = require('https');
+          var util = require('util');
+
+          var SLACK_WEB_HOOK_URL = process.env.WEB_HOOK_PATH;
+
+          exports.handler = function(event, context) {
+              // console.log(JSON.stringify(event, null, 2));
+              // console.log('From SNS:', event.Records[0].Sns.Message);
+
+              /*
+              var postData = {
+                  "channel": "#aws-sns",
+                  "username": "AWS SNS via Lamda :: DevQa Cloud",
+                  "text": "*" + event.Records[0].Sns.Subject + "*",
+                  "icon_emoji": ":aws:"
+              };
+              */
+              var postData = {
+                  "username": "AWS SNS",
+                  "text": event.Records[0].Sns.Subject,
+              };
+
+
+              var message = event.Records[0].Sns.Message;
+              var severity = "good";
+
+              var dangerMessages = [
+                  "Exception","exception",
+                  "Error","error",
+                  "Aborted","aborted",
+                  "Failed", "failed",
+                  "not authorized",
+                  "Unsuccessful","unsuccessful",
+                  "do not have permission"
+                ];
+
+              var warningMessages = [
+                  "Warning","warning",
+                  "Pending","pending",
+                  "Removed","removed",
+                  "Rollback","rollback",
+                  "Delete","delete",
+                  "Adding instance "
+                ];
+
+              for(var item in dangerMessages) {
+                  if (message.indexOf(dangerMessages[item]) != -1) {
+                      severity = "danger";
+                      break;
+                  }
+              }
+
+              // Only check for warning messages if necessary
+              if (severity == "good") {
+                  for(var item in warningMessages) {
+                      if (message.indexOf(warningMessages[item]) != -1) {
+                          severity = "warning";
+                          break;
+                      }
+                  }
+              }
+
+              // http body
+              postData.attachments = [
+                  {
+                      "color": severity,
+                      "text": message
+                  }
+              ];
+
+              // http header (options)
+              var options = {
+                  method: 'POST',
+                  hostname: 'hooks.slack.com',
+                  port: 443,
+                  path: SLACK_WEB_HOOK_URL
+              };
+
+              var req = https.request(options, function(res) {
+                res.setEncoding('utf8');
+                res.on('data', function (chunk) {
+                  context.done(null);
+                });
+              });
+
+              req.on('error', function(e) {
+                console.log('problem with request: ' + e.message);
+              });
+
+              req.write(util.format("%j", postData));
+              req.end();
+          };
+
+
+      # FunctionName: 'lambda-sns2slack'
+      Description: 'sns to slack Definition'
+      # DeadLetterConfig:
+      #   DeadLetterConfig
+      Environment:
+        Variables:
+          WEB_HOOK_PATH: '/services/T0EGFGB5J/B5MGGP60Y/LihgfSvIDw0dYuMVXCkGc0Dw'
+      Runtime: 'nodejs6.10'
+      Handler: 'index.handler'
+      # KmsKeyArn: String
+      # defautl memory size is 128mb
+      MemorySize: 128
+      # default timeout is 3 seconds
+      Timeout: 5
+      Role: !GetAtt LambdaExecutionRole.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref Sns2SlackSecurityGroup
+        # recommand subnet is on nat-subnet
+        SubnetIds:
+          - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
+          - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetB'
+
+  sns2SlackTopic:
+    Type: "AWS::SNS::Topic"
+    Properties:
+      DisplayName: 'sns to slack topic'
+      Subscription:
+        -
+          Endpoint: !GetAtt sns2slackFunction.Arn
+          Protocol: 'lambda'
+
+Outputs:
+  sns2SlackTopic:
+    Value: !Ref sns2SlackTopic
+    Export:
+      Name: !Sub '${ParentStack}-${EnvType}-sns2slack'
