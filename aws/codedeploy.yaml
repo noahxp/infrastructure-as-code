@@ -29,10 +29,18 @@ Parameters:
     Description: 'The secondary AutoScalingGroup Stack.'
     Default: ''
 
+  SNSStack:
+    Type: String
+    Description: 'notification to slack'
+    AllowedValues: ['yes', 'no']
+    Default: 'no'
+
 
 Conditions:
   AsgStackCond:  !Not [ !Equals [ !Ref AsgStack, '' ] ]
   AsgStack2Cond: !Not [ !Equals [ !Ref AsgStack2, '' ] ]
+  SNSStackCond: !Equals [ !Ref SNSStack, 'yes' ]
+
 
 Resources:
   CodeDeployApplication:
@@ -69,6 +77,26 @@ Resources:
       #     Version: String
       DeploymentConfigName: "CodeDeployDefault.OneAtATime"
       ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      # reference : http://docs.aws.amazon.com/codedeploy/latest/APIReference/API_TriggerConfig.html
+      TriggerConfigurations:
+        !If
+        - SNSStackCond
+        - - TriggerEvents:
+              # - DeploymentStart
+              - DeploymentSuccess
+              - DeploymentFailure
+              - DeploymentStop
+              - DeploymentRollback
+              # - DeploymentReady
+              # - InstanceStart
+              - InstanceSuccess
+              - InstanceFailure
+              # - InstanceReady'
+            TriggerName: !Sub '${AWS::StackName}-${EnvType}-trigger'
+            TriggerTargetArn:
+              'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-sns2slack'
+
+        - !Ref 'AWS::NoValue'
 
   CodeDeployServiceRole:
     Type: 'AWS::IAM::Role'
@@ -81,14 +109,19 @@ Resources:
             Action: 'sts:AssumeRole'
             Principal:
               Service:
-                - 'codedeploy.us-east-1.amazonaws.com'
-                - 'codedeploy.us-west-1.amazonaws.com'
-                - 'codedeploy.us-west-2.amazonaws.com'
-                - 'codedeploy.eu-west-1.amazonaws.com'
-                - 'codedeploy.eu-central-1.amazonaws.com'
-                - 'codedeploy.ap-northeast-1.amazonaws.com'
-                - 'codedeploy.ap-southeast-1.amazonaws.com'
-                - 'codedeploy.ap-southeast-2.amazonaws.com'
-                - 'codedeploy.sa-east-1.amazonaws.com'
+                # codedeploy.amazonaws.com for all supported endpoints, codedeploy.XXX.amazonaws.com for special endpoints
+                # reference : http://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-service-role.html
+                - codedeploy.amazonaws.com
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole'
+      Policies:
+        -
+          PolicyName: !Sub '${AWS::StackName}-${EnvType}-CodeDeployPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: 'Allow'
+                Action:
+                  - 'sns:Publish'
+                Resource: '*'
