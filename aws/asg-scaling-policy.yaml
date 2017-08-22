@@ -49,7 +49,7 @@ Conditions:
   HasScalingPolicyCond: !Not [ !Equals [ !Ref ScalingPolicy, 'None' ] ]
   SimpleScalingCond: !Equals [ !Ref ScalingPolicy, 'SimpleScaling' ]
   StepScalingCond:   !Equals [ !Ref ScalingPolicy, 'StepScaling'   ]
-
+  ScheduledActionCond: !Equals [ !Ref ScheduledAction, 'Yes'   ]
 
 Resources:
 
@@ -167,18 +167,20 @@ Resources:
 
   ##### Scheduled Action #####
   ScheduledActionUp:
+    Condition: ScheduledActionCond
     Type: AWS::AutoScaling::ScheduledAction
     Properties:
       AutoScalingGroupName:
         'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
       MaxSize: '1'
       MinSize: '1'
-      Recurrence: 0 9 * * MON-FRI
+      Recurrence: 0 1 * * MON-FRI
   ScheduledActionDown:
+    Condition: ScheduledActionCond
     Type: AWS::AutoScaling::ScheduledAction
     Properties:
       AutoScalingGroupName:
         'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
       MaxSize: '0'
       MinSize: '0'
-      Recurrence: 50 18 * * MON-FRI
+      Recurrence: 50 10 * * MON-FRI
