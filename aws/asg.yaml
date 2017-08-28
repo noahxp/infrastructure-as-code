@@ -141,6 +141,7 @@ Resources:
       # http://docs.aws.amazon.com/autoscaling/latest/userguide/as-instance-termination.html
       TerminationPolicies:
         - 'OldestInstance'
+        - 'Default'
       VPCZoneIdentifier:
         - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1A'
         - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1B'
