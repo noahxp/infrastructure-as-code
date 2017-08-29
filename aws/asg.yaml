@@ -108,7 +108,6 @@ Resources:
       HealthCheckGracePeriod: 300
       # ALB or EC2 , start with EC2, be sure to use ELB
       HealthCheckType: !Sub '${HealthCheckType}'
-      # InstanceId: !Sub 'Asg-${AWS::StackName}-'
       LaunchConfigurationName: !Ref LaunchConfig
       # LoadBalancerNames for CLB
       LoadBalancerNames:
@@ -127,6 +126,8 @@ Resources:
       MaxSize: !Sub '${MaxSize}'
       MinSize: !Sub '${MinSize}'
       DesiredCapacity: !Sub '${DesiredCapacity}'
+      MetricsCollection:
+        - Granularity: 1Minute
       NotificationConfigurations:
         !If
         - SNSStackCond
@@ -148,8 +149,7 @@ Resources:
       Tags:
         - PropagateAtLaunch: true
           Key: Name
-          Value: !Sub '${AWS::StackName}-${ParentStack}-${EnvType}-Asg'
-          # ResourceId: 'my-asg'
+          Value: !Sub '${AWS::StackName}-${EnvType}-Asg'
 
   LaunchConfig:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
@@ -164,7 +164,6 @@ Resources:
       #       VolumeType: gp2
       IamInstanceProfile: !Ref InstanceProfile
       ImageId: !Sub '${AMIId}'
-      # InstanceId: 'asg-lc'
       InstanceMonitoring: true
       InstanceType: !Sub '${InstanceType}'
       KeyName: !If [EC2KeyPairCond, !Ref EC2KeyPair, !Ref 'AWS::NoValue']
@@ -174,10 +173,26 @@ Resources:
       UserData:
         'Fn::Base64': !Sub |
            #!/bin/bash -x
+           # system patch
            sudo yum update -y
-           wget https://aws-codedeploy-ap-northeast-1.s3.amazonaws.com/latest/install
+           # install code deploy agent
+           curl -O https://aws-codedeploy-ap-northeast-1.s3.amazonaws.com/latest/install
            chmod +x ./install
            sudo ./install auto
+           ##### install cloudwatch metrics - start #####
+           cd /opt
+           # install memory disk metrics util
+           sudo yum install perl-Switch perl-DateTime perl-Sys-Syslog perl-LWP-Protocol-https -y
+           sudo curl -O http://aws-cloudwatch.s3.amazonaws.com/downloads/CloudWatchMonitoringScripts-1.2.1.zip
+           sudo unzip CloudWatchMonitoringScripts-1.2.1.zip
+           sudo rm CloudWatchMonitoringScripts-1.2.1.zip
+           # setup memory disk metrics to crontab
+           cd /tmp
+           crontab -l > mycron
+           echo "*/5 * * * * /opt/aws-scripts-mon/mon-put-instance-data.pl --mem-util --mem-used --mem-used-incl-cache-buff --mem-avail --swap-util --disk-path=/ --disk-space-util --disk-space-avail --from-cron" >> mycron
+           crontab mycron
+           rm mycron
+           ##### install cloudwatch metrics - end #####
 
   InstanceProfile:
     Type: 'AWS::IAM::InstanceProfile'
@@ -220,6 +235,19 @@ Resources:
                   - 'autoscaling:EnterStandby'
                   - 'autoscaling:ResumeProcesses'
                   - 'autoscaling:ExitStandby'
+                Resource: '*'
+        -
+          PolicyName: !Sub '${AWS::StackName}-${EnvType}-MemoryDiskMetrics'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: 'Allow'
+                Action:
+                  - 'cloudwatch:PutMetricData'
+                  - 'cloudwatch:GetMetricStatistics'
+                  - 'cloudwatch:ListMetrics'
+                  - 'ec2:DescribeTags'
                 Resource: '*'
 
 #     "ec2:DescribeInstances",
