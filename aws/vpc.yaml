@@ -326,51 +326,28 @@ Resources:
         - !Ref 'PrivateRouteTable1B'
         - !Ref 'PrivateRouteTable2A'
         - !Ref 'PrivateRouteTable2B'
-      ServiceName: !Join [ '', [ 'com.amazonaws.', Ref: 'AWS::Region', '.s3' ] ]
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
       VpcId: !Ref 'VPC'
 
-
-  # ##### security group #####
-  # # public
-  # ELBSecurityGroup:
-  #   Type: 'AWS::EC2::SecurityGroup'
-  #   Properties:
-  #     GroupDescription: 'ELBSecurityGroup'
-  #     SecurityGroupIngress:
-  #       -
-  #         IpProtocol: 'tcp'
-  #         FromPort: '80'
-  #         ToPort: '80'
-  #         CidrIp: '0.0.0.0/0'
-  #       -
-  #         IpProtocol: 'tcp'
-  #         FromPort: '443'
-  #         ToPort: '443'
-  #         CidrIp: '0.0.0.0/0'
-  #     Tags:
-  #       -
-  #         Key: Name
-  #         Value: !Sub '${EnvType}-public-web-elb'
-  #     VpcId:
-  #       Ref: 'VPC'
-  # PrivateSecurityGroup1Http80:
-  #   Type: 'AWS::EC2::SecurityGroup'
-  #   Properties:
-  #     GroupDescription: 'PrivateSecurityGroup1Http80'
-  #     SecurityGroupIngress:
-  #       -
-  #         IpProtocol: 'tcp'
-  #         FromPort: '80'
-  #         ToPort: '80'
-  #         SourceSecurityGroupId:
-  #           Ref: ELBSecurityGroup
-  #     Tags:
-  #       -
-  #         Key: Name
-  #         Value: !Sub '${EnvType}-private-web-http-80'
-  #     VpcId:
-  #       Ref: 'VPC'
-
+  DynamicDBVPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          -
+            Effect: 'Allow'
+            Principal: '*'
+            Action:
+              - '*'
+            Resource: '*'
+      RouteTableIds:
+        - !Ref 'PrivateRouteTable1A'
+        - !Ref 'PrivateRouteTable1B'
+        - !Ref 'PrivateRouteTable2A'
+        - !Ref 'PrivateRouteTable2B'
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
+      VpcId: !Ref 'VPC'
 
 ##### output resource to another stack #####
 Outputs:
@@ -460,13 +437,3 @@ Outputs:
       Ref: 'NatRouteTableB'
     Export:
       Name: !Sub '${AWS::StackName}-${EnvType}-NatRouteTableB'
-  # ELBSecurityGroup:
-  #   Value:
-  #     Ref: 'ELBSecurityGroup'
-  #   Export:
-  #     Name: !Sub '${AWS::StackName}-${EnvType}-ELBSecurityGroup'
-  # PrivateSecurityGroup1Http80:
-  #   Value:
-  #     Ref: 'PrivateSecurityGroup1Http80'
-  #   Export:
-  #     Name: !Sub '${AWS::StackName}-${EnvType}-PrivateSecurityGroup1Http80'
