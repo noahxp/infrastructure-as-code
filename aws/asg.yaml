@@ -179,20 +179,27 @@ Resources:
            curl -O https://aws-codedeploy-ap-northeast-1.s3.amazonaws.com/latest/install
            chmod +x ./install
            sudo ./install auto
-           ##### install cloudwatch metrics - start #####
+           ##############################################
+           ##### install cloudwatch metrics (for memory/disk)
            cd /opt
            # install memory disk metrics util
            sudo yum install perl-Switch perl-DateTime perl-Sys-Syslog perl-LWP-Protocol-https -y
            sudo curl -O http://aws-cloudwatch.s3.amazonaws.com/downloads/CloudWatchMonitoringScripts-1.2.1.zip
            sudo unzip CloudWatchMonitoringScripts-1.2.1.zip
            sudo rm CloudWatchMonitoringScripts-1.2.1.zip
-           # setup memory disk metrics to crontab
+           ### setup memory disk metrics to crontab
            cd /tmp
            crontab -l > mycron
            echo "*/5 * * * * /opt/aws-scripts-mon/mon-put-instance-data.pl --mem-util --mem-used --mem-used-incl-cache-buff --mem-avail --swap-util --disk-path=/ --disk-space-util --disk-space-avail --from-cron" >> mycron
            crontab mycron
            rm mycron
-           ##### install cloudwatch metrics - end #####
+           ##############################################
+           ##### install aws logs agent
+           cd ~
+           curl --silent https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -O
+           chmod +x ./awslogs-agent-setup.py
+           sudo ./awslogs-agent-setup.py -n -r $(curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | grep -i region | awk -F\" '{print $4}') -c s3://noah-config/awslogs/example.conf
+
 
   InstanceProfile:
     Type: 'AWS::IAM::InstanceProfile'
@@ -214,7 +221,7 @@ Resources:
               Service: 'ec2.amazonaws.com'
       Policies:
         -
-          PolicyName: !Sub '${AWS::StackName}-${EnvType}-EC2CodeDeployPolicy'
+          PolicyName: !Sub '${AWS::StackName}-${EnvType}-EC2CodeDeploy'
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -237,7 +244,7 @@ Resources:
                   - 'autoscaling:ExitStandby'
                 Resource: '*'
         -
-          PolicyName: !Sub '${AWS::StackName}-${EnvType}-MemoryDiskMetrics'
+          PolicyName: !Sub '${AWS::StackName}-${EnvType}-CustomMetrics'
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -249,6 +256,26 @@ Resources:
                   - 'cloudwatch:ListMetrics'
                   - 'ec2:DescribeTags'
                 Resource: '*'
+        -
+          PolicyName: !Sub '${AWS::StackName}-${EnvType}-CloudWatchLogsAgent'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: 'Allow'
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'logs:DescribeLogStreams'
+                Resource: 'arn:aws:logs:*:*:*'
+              -
+                Effect: 'Allow'
+                Action:
+                  - 's3:GetObject'
+                Resource: 'arn:aws:s3:::noah-config/*'
+                # s3://noah-config/* is the cloudwatch logs agent defualt template
+
 
 #     "ec2:DescribeInstances",
 #     "cloudformation:DescribeStacks",
