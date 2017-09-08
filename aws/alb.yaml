@@ -142,7 +142,7 @@ Resources:
 
 
   ApplicationLoadBalancer:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
       Name:
         !If
@@ -183,6 +183,9 @@ Resources:
         HttpCode: 200-299
       Port: 80
       Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '15'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
       Tags:
