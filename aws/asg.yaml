@@ -41,9 +41,9 @@ Parameters:
     Default: 0
 
   AMIId:
-    Type: String
+    Type: 'AWS::EC2::Image::Id'
     Description: '(*)Provides the unique ID of the Amazon Machine Image (AMI) that was assigned during registration.'
-    Default: 'ami-3bd3c45c'
+    Default: 'ami-4af5022c'
 
   InstanceType:
     Type: String
@@ -84,7 +84,7 @@ Parameters:
 
   EC2KeyPair:
     Type: String
-    Description: 'The Bastion Server KeyPair'
+    Description: 'The EC2 KeyPair'
     Default: ''
 
   SpotPrice:
