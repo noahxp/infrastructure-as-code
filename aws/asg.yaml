@@ -43,7 +43,7 @@ Parameters:
   AMIId:
     Type: 'AWS::EC2::Image::Id'
     Description: '(*)Provides the unique ID of the Amazon Machine Image (AMI) that was assigned during registration.'
-    Default: 'ami-4af5022c'
+    Default: 'ami-2803ac4e'
 
   InstanceType:
     Type: String
