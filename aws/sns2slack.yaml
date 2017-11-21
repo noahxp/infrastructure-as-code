@@ -74,109 +74,6 @@ Resources:
   sns2slackFunction:
     Type: 'AWS::Lambda::Function'
     Properties:
-      Code:
-        ZipFile: >-
-          'use strict';
-
-          var https = require('https');
-          var util = require('util');
-
-          var SLACK_WEB_HOOK_URL = process.env.WEB_HOOK_PATH;
-
-          exports.handler = function(event, context) {
-              let message = "<no message>";
-              let subject = "<no subject>";
-              if (typeof event === "undefined" || typeof event.Records === "undefined" || typeof event.Records[0].Sns === "undefined"){
-                subject = JSON.stringify(event);
-                message = JSON.stringify(context);
-              } else {
-                subject = event.Records[0].Sns.Subject;
-                message = event.Records[0].Sns.Message;
-              }
-              let severity = "good";
-
-              /*
-              let postData = {
-                  "channel": "#aws-sns",
-                  "username": "AWS SNS via Lamda :: DevQa Cloud",
-                  "text": "*" + subject + "*",
-                  "icon_emoji": ":aws:"
-              };
-              */
-              let postData = {
-                  "username": "AWS SNS",
-                  "text": subject
-              };
-
-
-              let dangerMessages = [
-                  "Exception","exception",
-                  "Error","error",
-                  "Aborted","aborted",
-                  "Failed", "failed",
-                  "not authorized",
-                  "Unsuccessful","unsuccessful",
-                  "do not have permission"
-                ];
-
-              let warningMessages = [
-                  "Warning","warning",
-                  "Pending","pending",
-                  "Removed","removed",
-                  "Rollback","rollback",
-                  "Delete","delete",
-                  "Adding instance "
-                ];
-
-              for(let item in dangerMessages) {
-                  if (message.indexOf(dangerMessages[item]) != -1) {
-                      severity = "danger";
-                      break;
-                  }
-              }
-
-              // Only check for warning messages if necessary
-              if (severity == "good") {
-                  for(let item in warningMessages) {
-                      if (message.indexOf(warningMessages[item]) != -1) {
-                          severity = "warning";
-                          break;
-                      }
-                  }
-              }
-
-              // http body
-              postData.attachments = [
-                  {
-                      "color": severity,
-                      "text": message
-                  }
-              ];
-
-              // http header (options)
-              let options = {
-                  method: 'POST',
-                  hostname: 'hooks.slack.com',
-                  port: 443,
-                  path: SLACK_WEB_HOOK_URL
-              };
-
-              let req = https.request(options, function(res) {
-                res.setEncoding('utf8');
-                res.on('data', function (chunk) {
-                  context.done(null);
-                });
-              });
-
-              req.on('error', function(e) {
-                console.log('problem with request: ' + e.message);
-              });
-
-              req.write(util.format("%j", postData));
-              req.end();
-          };
-
-
       # FunctionName: 'lambda-sns2slack'
       Description: 'sns to slack Definition'
       # DeadLetterConfig:
@@ -184,6 +81,7 @@ Resources:
       Environment:
         Variables:
           WEB_HOOK_PATH: '/services/T0EGFGB5J/B5MGGP60Y/LihgfSvIDw0dYuMVXCkGc0Dw'
+          CHANNEL: 'aws-sns'
       Runtime: 'nodejs6.10'
       Handler: 'index.handler'
       # KmsKeyArn: String
@@ -200,6 +98,112 @@ Resources:
       #   SubnetIds:
       #     - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
       #     - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetB'
+      Code:
+        ZipFile: >-
+          'use strict';
+
+          var https = require('https');
+
+          let SLACK_WEB_HOOK_URL = process.env.WEB_HOOK_PATH;
+          let channelPrefix = '#' + process.env.CHANNEL;
+
+          exports.handler = function(event, context) {
+            let text = "";
+            let preText = "";
+            let message = "";
+            let date = null;
+            if (typeof event === "undefined" || typeof event.Records === "undefined" || typeof event.Records[0].Sns === "undefined"){
+              message = JSON.stringify(context);
+            } else {
+              preText = event.Records[0].Sns.Subject;
+              message = event.Records[0].Sns.Message;
+              if (event.Records[0].Sns.Timestamp)
+                date = new Date(event.Records[0].Sns.Timestamp).getTime()/1000;
+            }
+
+            let color = getColor(message);
+            let channel = channelPrefix;
+            /*
+            switch (color){
+              case 'danger':
+                channel += 'error';
+              break;
+              case 'warning':
+                channel += 'warn';
+              break;
+              default:
+                channel += 'info';
+            }
+            */
+            try{
+              message = JSON.stringify(JSON.parse(message),null,2);
+            }catch(error){}
+
+            let postData = {
+              "username": "AWS SNS",
+              "channel": channel,
+              "text": text
+            };
+            postData.attachments = [
+              {
+                "color": color,
+                "pretext": preText,
+                "text": message,
+                "ts": date
+              }
+            ];
+
+            let options = {
+              method: 'POST',
+              hostname: 'hooks.slack.com',
+              port: 443,
+              path: SLACK_WEB_HOOK_URL
+            };
+
+            let req = https.request(options, (res) => {
+              res.setEncoding('utf-8');
+              res.on('data', (data) => {
+                console.log('http-request-body=',data);
+                context.succeed();
+              });
+            });
+            req.on('error', (e) => {
+              console.log('problem with request:' , e.message);
+            });
+            req.write(JSON.stringify(postData));
+            req.end();
+
+          };
+
+
+          function getColor(message){
+            let color = "good";
+            message = JSON.stringify(message).toLowerCase();
+
+            let dangerMessages = [
+              "exception" ,"error" ,"aborted" ,"failed" ,"not authorized" ,"unsuccessful" ,"do not have permission"
+            ];
+            let warningMessages = [
+              "warning" , "pending" ,"removed" ,"rollback" ,"delete" ,"adding instance"
+            ];
+
+            for(let item in dangerMessages) {
+              if (message.indexOf(dangerMessages[item])>=0){
+                color = "danger";
+                break;
+              }
+            }
+            if (color === "good") {
+              for(let item in warningMessages) {
+                if (message.indexOf(warningMessages[item])>=0){
+                  color = "warning";
+                  break;
+                }
+              }
+            }
+            return color;
+          }
+
 
   sns2SlackTopic:
     Type: "AWS::SNS::Topic"
