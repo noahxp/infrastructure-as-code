@@ -1,0 +1,81 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3 & DynamoDB VPC Endpoint'
+
+# environment type & bash parameters
+Parameters:
+  EnvType:
+    Type: String
+    Description: '(*)Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+# parameters for env-type
+Mappings:
+  RouteTableIds:
+    dev:
+      RouteTablePublic: 'rtb-12345678'
+      RouteTablePrivate: 'rtb-12345678'
+      RouteTableNatA: 'rtb-12345678'
+      RouteTableNatC: 'rtb-12345678'
+    stag:
+      RouteTablePublic: 'rtb-12345678'
+      RouteTablePrivate: 'rtb-12345678'
+      RouteTableNatA: 'rtb-12345678'
+      RouteTableNatC: 'rtb-12345678'
+    prod:
+      RouteTablePublic: 'rtb-12345678'
+      RouteTablePrivate: 'rtb-12345678'
+      RouteTableNatA: 'rtb-12345678'
+      RouteTableNatC: 'rtb-12345678'
+Resources:
+  S3Endpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - 's3:*'
+            Resource:
+              - 'arn:aws:s3:::*'
+      RouteTableIds:
+        - !FindInMap [ 'RouteTableIds', Ref: EnvType, 'RouteTablePublic' ]
+        - !FindInMap [ 'RouteTableIds', Ref: EnvType, 'RouteTablePrivate' ]
+        - !FindInMap [ 'RouteTableIds', Ref: EnvType, 'RouteTableNatA' ]
+        - !FindInMap [ 'RouteTableIds', Ref: EnvType, 'RouteTableNatC' ]
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcId:
+        'Fn::ImportValue': !Sub 'VPC-hub-shared-${EnvType}'
+
+  DynamoDBEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - 'dynamodb:GetItem'
+              - 'dynamodb:PutItem'
+              - 'dynamodb:UpdateItem'
+              - 'dynamodb:BatchGetItem'
+              - 'dynamodb:DeleteGetItem'
+              - 'dynamodb:Query'
+            Resource:
+              - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*'
+      RouteTableIds:
+        - !FindInMap [ 'RouteTableIds', Ref: EnvType, 'RouteTablePublic' ]
+        - !FindInMap [ 'RouteTableIds', Ref: EnvType, 'RouteTablePrivate' ]
+        - !FindInMap [ 'RouteTableIds', Ref: EnvType, 'RouteTableNatA' ]
+        - !FindInMap [ 'RouteTableIds', Ref: EnvType, 'RouteTableNatC' ]
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
+      VpcId:
+        'Fn::ImportValue': !Sub 'VPC-hub-shared-${EnvType}'

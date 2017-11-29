@@ -1,0 +1,198 @@
+---
+##################################################################################################
+# 警告 !
+# 這裡的 lambda function code ，請與子資料夾裡 sns2slack-node/index.js 同步，該子資料夾專案為測試用，這裡只是佈署用途
+##################################################################################################
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'sns to slack'
+
+Parameters:
+  EnvType:
+    Type: String
+    Description: '(*)Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+Mappings:
+  SlackEnv:
+    dev:
+      CHANNEL: 'rd_dev_'
+    stag:
+      CHANNEL: 'rd_stag_'
+    prod:
+      CHANNEL: 'rd_prod_'
+
+
+Resources:
+  ##### security group for sns 2 slack #####
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: 'Allow'
+            Principal:
+              Service: 'lambda.amazonaws.com'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        -
+          PolicyName: !Sub 'sns2Slack-LambdaExecutionRole'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: 'Allow'
+                Action:
+                  - 'ec2:CreateNetworkInterface'
+                  - 'ec2:DescribeNetworkInterfaces'
+                  - 'ec2:DeleteNetworkInterface'
+                Resource: '*'
+
+  sns2slackFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Description: 'sns to slack Definition'
+      Environment:
+        Variables:
+          # from slack web hook setting
+          WEB_HOOK_PATH: '/services/T0675A0CX/B7B91T4CT/1111111111'
+          CHANNEL: !FindInMap [ 'SlackEnv', Ref: EnvType, 'CHANNEL' ]
+      Runtime: 'nodejs6.10'
+      Handler: 'index.handler'
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: >-
+          'use strict';
+
+          var https = require('https');
+
+          let SLACK_WEB_HOOK_URL = process.env.WEB_HOOK_PATH;
+          let channelPrefix = '#' + process.env.CHANNEL;
+
+          exports.handler = function(event, context) {
+            let text = "";
+            let preText = "";
+            let message = "";
+            let date = null;
+            if (typeof event === "undefined" || typeof event.Records === "undefined" || typeof event.Records[0].Sns === "undefined"){
+              message = JSON.stringify(context);
+            } else {
+              preText = event.Records[0].Sns.Subject;
+              message = event.Records[0].Sns.Message;
+              if (event.Records[0].Sns.Timestamp)
+                date = new Date(event.Records[0].Sns.Timestamp).getTime()/1000;
+            }
+
+            let color = getColor(message);
+            let channel = channelPrefix;
+            switch (color){
+              case 'danger':
+                channel += 'error';
+              break;
+              case 'warning':
+                channel += 'warn';
+              break;
+              default:
+                channel += 'info';
+            }
+            try{
+              message = JSON.stringify(JSON.parse(message),null,2);
+            }catch(error){}
+
+            let postData = {
+              "username": "AWS SNS",
+              "channel": channel,
+              "text": text
+            };
+            postData.attachments = [
+              {
+                "color": color,
+                "pretext": preText,
+                "text": message,
+                "ts": date
+              }
+            ];
+
+            let options = {
+              method: 'POST',
+              hostname: 'hooks.slack.com',
+              port: 443,
+              path: SLACK_WEB_HOOK_URL
+            };
+
+            let req = https.request(options, (res) => {
+              res.setEncoding('utf-8');
+              res.on('data', (data) => {
+                console.log('http-request-body=',data);
+                context.succeed();
+              });
+            });
+            req.on('error', (e) => {
+              console.log('problem with request:' , e.message);
+            });
+            req.write(JSON.stringify(postData));
+            req.end();
+
+          };
+
+
+          function getColor(message){
+            let color = "good";
+            message = JSON.stringify(message).toLowerCase();
+
+            let dangerMessages = [
+              "exception" ,"error" ,"aborted" ,"failed" ,"not authorized" ,"unsuccessful" ,"do not have permission"
+            ];
+            let warningMessages = [
+              "warning" , "pending" ,"removed" ,"rollback" ,"delete" ,"adding instance"
+            ];
+
+            for(let item in dangerMessages) {
+              if (message.indexOf(dangerMessages[item])>=0){
+                color = "danger";
+                break;
+              }
+            }
+            if (color === "good") {
+              for(let item in warningMessages) {
+                if (message.indexOf(warningMessages[item])>=0){
+                  color = "warning";
+                  break;
+                }
+              }
+            }
+            return color;
+          }
+
+
+  sns2SlackTopic:
+    Type: "AWS::SNS::Topic"
+    Properties:
+      DisplayName: 'sns to slack topic'
+      Subscription:
+        - Endpoint: !GetAtt sns2slackFunction.Arn
+          Protocol: 'lambda'
+
+  lambdaInvokePermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !GetAtt sns2slackFunction.Arn
+      Action: "lambda:InvokeFunction"
+      Principal: "sns.amazonaws.com"
+      SourceArn: !Ref sns2SlackTopic
+
+
+Outputs:
+  sns2SlackTopic:
+    Value: !Ref sns2SlackTopic
+    Export:
+      Name: !Sub 'sns2slack'

@@ -1,0 +1,610 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Slack User DynamoDB, CronJob(lambda), API(api-gateway+lambda function)'
+
+# environment type & bash parameters
+Parameters:
+  EnvType:
+    Type: String
+    Description: '(*)Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+Mappings:
+  AwsAccount:
+    dev:
+      NAME: 'mydev'
+    stag:
+      NAME: 'mystag'
+    prod:
+      NAME: 'myprod'
+
+
+Conditions:
+  NotOnDevCond: !Not [ !Equals [ !Ref EnvType, 'dev' ] ]
+
+
+Resources:
+  SlackUserParserCronJob:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'SlackUserParser'
+      Description: 'slack user cron job'
+      Environment:
+        Variables:
+          # token : https://api.slack.com/methods/users.list/test
+          SLACK_TOKEN: 'my-all-user-slack-token'
+      Runtime: 'nodejs6.10'
+      Handler: 'index.handler'
+      MemorySize: 192
+      Timeout: 180
+      # Role: !GetAtt LambdaExecutionRole.Arn
+      Role:
+        'Fn::ImportValue': !Sub '${EnvType}-LambdaExecutionRoleArn'
+      # KmsKeyArn: !GetAtt SlackUserKey.Arn
+      DeadLetterConfig:
+        TargetArn:
+          'Fn::ImportValue': 'sns2slack'
+      Code:
+        S3Bucket:
+          Fn::Join:
+            - ''
+            -
+              - !FindInMap [ 'AwsAccount', Ref: EnvType, 'NAME' ]
+              - '-cfn-tools'
+          # '104awsdev24-cfn-tools'
+        S3Key: 'lambda-code/SlackUser.zip'
+        # ZipFile: >-
+        #   'use strict';
+
+  ScheduledRule:
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: "ScheduledRule"
+      # http://docs.aws.amazon.com/zh_cn/AmazonCloudWatch/latest/events/ScheduledEvents.html
+      ScheduleExpression: "cron(0 12 ? * MON-FRI *)"
+      State: "ENABLED"
+      Targets:
+        -
+          Arn: !GetAtt SlackUserParserCronJob.Arn
+          Id: "SlackUserParserCronJob"
+  PermissionForEventsToInvokeLambda:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref SlackUserParserCronJob
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt ScheduledRule.Arn
+
+
+
+  ##### slack dynamodb table #####
+  SlackUserTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: 'SlackUser'
+      AttributeDefinitions:
+        - AttributeName: adaccount
+          AttributeType: S
+        - AttributeName: slackName
+          AttributeType: S
+      KeySchema:
+        - AttributeName: adaccount
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: '1'
+        WriteCapacityUnits: '1'
+      # http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/SecondaryIndexes.html
+      GlobalSecondaryIndexes:
+        -
+          IndexName: "SlackUserGSI"
+          KeySchema:
+            -
+              AttributeName: "slackName"
+              KeyType: "HASH"
+          Projection:
+            ProjectionType: 'ALL'
+          ProvisionedThroughput:
+            ReadCapacityUnits: "1"
+            WriteCapacityUnits: "1"
+
+
+  WriteCapacityScalableTarget:
+    Type: "AWS::ApplicationAutoScaling::ScalableTarget"
+    Properties:
+      MaxCapacity: 10
+      MinCapacity: 2
+      ResourceId: !Sub 'table/${SlackUserTable}'
+      RoleARN: !GetAtt SlackUserTableScalingRole.Arn
+      ScalableDimension: 'dynamodb:table:WriteCapacityUnits'
+      ServiceNamespace: 'dynamodb'
+
+  WriteScalingPolicy:
+    Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+    Properties:
+      PolicyName: 'WriteAutoScalingPolicy'
+      PolicyType: 'TargetTrackingScaling'
+      ScalingTargetId: !Ref 'WriteCapacityScalableTarget'
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+
+  ReadCapacityScalableTarget:
+    Type: "AWS::ApplicationAutoScaling::ScalableTarget"
+    Properties:
+      MaxCapacity: 5
+      MinCapacity: 2
+      ResourceId: !Sub 'table/${SlackUserTable}'
+      RoleARN: !GetAtt SlackUserTableScalingRole.Arn
+      ScalableDimension: 'dynamodb:table:ReadCapacityUnits'
+      ServiceNamespace: 'dynamodb'
+
+  ReadScalingPolicy:
+    Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+    Properties:
+      PolicyName: 'ReadAutoScalingPolicy'
+      PolicyType: 'TargetTrackingScaling'
+      ScalingTargetId: !Ref 'ReadCapacityScalableTarget'
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+
+  SlackUserTableScalingRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - 'application-autoscaling.amazonaws.com'
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        -
+          PolicyName: "SlackUserTableScalingPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:UpdateTable"
+                  - "cloudwatch:PutMetricAlarm"
+                  - "cloudwatch:DescribeAlarms"
+                  - "cloudwatch:GetMetricStatistics"
+                  - "cloudwatch:SetAlarmState"
+                  - "cloudwatch:DeleteAlarms"
+                Resource: "*"
+
+
+
+  ####################################################
+
+  ##### lambda default security group #####
+  LambdaPrivateSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'SlackUserAPISecurityGroup'
+      Tags:
+        -
+          Key: Name
+          Value: !Sub 'SlackUserAPISecurityGroup'
+      VpcId:
+        'Fn::ImportValue': !Sub 'VPC-hub-shared-${EnvType}'
+
+
+
+  ##### get slack name by adaccount #####
+  SlackUserAPI:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'SlackUserAPI'
+      Description: 'get slack name by adaccount'
+      Runtime: 'nodejs6.10'
+      Handler: 'index.handler'
+      MemorySize: 128
+      Timeout: 10
+      # Role: !GetAtt LambdaExecutionRole.Arn
+      Role:
+        'Fn::ImportValue': !Sub '${EnvType}-LambdaExecutionRoleArn'
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaPrivateSecurityGroup
+        SubnetIds:
+          - 'Fn::ImportValue': !Sub 'SN-private-1a-1-${EnvType}'
+          - 'Fn::ImportValue': !Sub 'SN-private-1c-1-${EnvType}'
+      DeadLetterConfig:
+        TargetArn:
+          'Fn::ImportValue': 'sns2slack'
+      Code:
+        # S3Bucket: '104awsdev24-cfn-tools'
+        S3Bucket:
+          Fn::Join:
+            - ''
+            -
+              - !FindInMap [ 'AwsAccount', Ref: EnvType, 'NAME' ]
+              - '-cfn-tools'
+        S3Key: 'lambda-code/SlackAPI.zip'
+        # ZipFile: >-
+        #   'use strict';
+
+
+  ##### get slack name by adaccount #####
+  SlackNameAPI:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'SlackNameAPI'
+      Description: 'get adaccount by slack name'
+      Runtime: 'nodejs6.10'
+      Handler: 'slack.handler'
+      MemorySize: 128
+      Timeout: 10
+      # Role: !GetAtt LambdaExecutionRole.Arn
+      Role:
+        'Fn::ImportValue': !Sub '${EnvType}-LambdaExecutionRoleArn'
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaPrivateSecurityGroup
+        SubnetIds:
+          - 'Fn::ImportValue': !Sub 'SN-private-1a-1-${EnvType}'
+          - 'Fn::ImportValue': !Sub 'SN-private-1c-1-${EnvType}'
+      DeadLetterConfig:
+        TargetArn:
+          'Fn::ImportValue': 'sns2slack'
+      Code:
+        # S3Bucket: '104awsdev24-cfn-tools'
+        S3Bucket:
+          Fn::Join:
+            - ''
+            -
+              - !FindInMap [ 'AwsAccount', Ref: EnvType, 'NAME' ]
+              - '-cfn-tools'
+        S3Key: 'lambda-code/SlackAPI.zip'
+        # ZipFile: >-
+        #   'use strict';
+
+
+  ####################################################
+  ##### slack user kms key #####
+  # SlackUserKMSKey:
+  #   Type: "AWS::KMS::Alias"
+  #   Properties:
+  #     AliasName: 'alias/SlackUserKMSKey'
+  #     TargetKeyId: !Ref SlackUserKey
+  #
+  #
+  # SlackUserKey:
+  #   Type: "AWS::KMS::Key"
+  #   Properties:
+  #     Description: "Slack User Keys"
+  #     KeyPolicy:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Sid: 'Enable IAM User Permissions'
+  #           Effect: Allow
+  #           Principal:
+  #             AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+  #           Action: 'kms:*'
+  #           Resource: "*"
+
+
+  ########################
+  ##### slack api api-gw #####
+  SlackApiGW:
+    Type: "AWS::ApiGateway::RestApi"
+    Properties:
+      Name: 'SlackUserApi'
+      Description: 'Get Slack User Information API'
+      FailOnWarnings: true
+
+  ##### slack user api #####
+  SlackUserAPIPermissionForApiGW:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref SlackUserAPI
+      Action: "lambda:InvokeFunction"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SlackApiGW}/*'
+
+  SlackUserApiResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      RestApiId: !Ref SlackApiGW
+      ParentId:
+        Fn::GetAtt:
+        - SlackApiGW
+        - RootResourceId
+      PathPart: user
+
+  SlackUserApiMethod:
+    DependsOn: 'SlackUserAPIPermissionForApiGW'
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref SlackApiGW
+      ResourceId: !Ref SlackUserApiResource
+      ApiKeyRequired: true
+      AuthorizationType: NONE
+      HttpMethod: GET
+      MethodResponses:
+        - StatusCode: 200
+      Integration:
+        Type: 'AWS'
+        IntegrationHttpMethod: 'POST'
+        IntegrationResponses:
+          - StatusCode: 200
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SlackUserAPI.Arn}/invocations'
+        RequestTemplates:
+          application/json:
+            Fn::Join:
+              - ''
+              -
+                - '{ '
+                - '#set($query = $input.params().querystring) '
+                - '#foreach( $key in $query.keySet())
+                '
+                - '  "$key" : "$query.get($key)" '
+                - '  #if($foreach.hasNext),#end '
+                - '#end '
+                - '} '
+
+
+  ##### slack name api #####
+  SlackNameAPIPermissionForApiGW:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref SlackNameAPI
+      Action: "lambda:InvokeFunction"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SlackApiGW}/*'
+
+  SlackNameApiResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      RestApiId: !Ref SlackApiGW
+      ParentId:
+        Fn::GetAtt:
+        - SlackApiGW
+        - RootResourceId
+      PathPart: slack
+
+  SlackNameApiMethod:
+    DependsOn: 'SlackNameAPIPermissionForApiGW'
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      RestApiId: !Ref SlackApiGW
+      ResourceId: !Ref SlackNameApiResource
+      ApiKeyRequired: true
+      AuthorizationType: NONE
+      HttpMethod: GET
+      MethodResponses:
+        - StatusCode: 200
+      Integration:
+        Type: 'AWS'
+        IntegrationHttpMethod: 'POST'
+        IntegrationResponses:
+          - StatusCode: 200
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SlackNameAPI.Arn}/invocations'
+        RequestTemplates:
+          application/json:
+            Fn::Join:
+              - ''
+              -
+                - '{ '
+                - '#set($query = $input.params().querystring) '
+                - '#foreach( $key in $query.keySet())
+                '
+                - '  "$key" : "$query.get($key)" '
+                - '  #if($foreach.hasNext),#end '
+                - '#end '
+                - '} '
+
+  ##### slack user api & slack name api deployment #####
+  SlackUserApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - SlackUserApiMethod
+      - SlackNameApiMethod
+    Properties:
+      RestApiId:
+        Ref: SlackApiGW
+
+  SlackUserApiStage:
+    Type: "AWS::ApiGateway::Stage"
+    Properties:
+      DeploymentId: !Ref SlackUserApiDeployment
+      Description: 'SlackUser Api Stage'
+      RestApiId: !Ref SlackApiGW
+      StageName: !Sub '${EnvType}'
+
+
+  ##### slack user & slack name api key #####
+  SlackUserApiKey:
+    Type: "AWS::ApiGateway::ApiKey"
+    Properties:
+      Name: 'SlackUserApiKey'
+      Description: "slack user api key"
+      Enabled: true
+      StageKeys:
+        - RestApiId:
+            Ref: SlackApiGW
+          StageName:
+            Ref: SlackUserApiStage
+
+
+  SlackAPIUsagePlan:
+    Type: "AWS::ApiGateway::UsagePlan"
+    Properties:
+      ApiStages:
+        - ApiId:
+            Ref: SlackApiGW
+          Stage:
+            Ref: SlackUserApiStage
+      Description: 'SlackAPI Usage Plan'
+      Quota:
+        Limit: 5000
+        Period: DAY
+      Throttle:
+        BurstLimit: 10
+        RateLimit: 20
+      UsagePlanName: 'SlackAPIUsagePlan'
+
+  SlackAPIUsagePlanKey:
+    Type: "AWS::ApiGateway::UsagePlanKey"
+    Properties:
+      KeyId: !Ref SlackUserApiKey
+      KeyType: 'API_KEY'
+      UsagePlanId: !Ref SlackAPIUsagePlan
+
+
+
+
+
+  ######## 戳 lambda
+  SlackUserAPIScheduledRule:
+    Condition: NotOnDevCond
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: "ScheduledRule"
+      # http://docs.aws.amazon.com/zh_cn/AmazonCloudWatch/latest/events/ScheduledEvents.html
+      # m h dd mm ww yy
+      # ScheduleExpression: "cron(0 12 ? * MON-FRI *)"
+      ScheduleExpression: "cron(0/20 * * * ? *)"
+      State: "ENABLED"
+      Targets:
+        -
+          Arn: !GetAtt SlackUserAPI.Arn
+          Id: "SlackUserAPI"
+  SlackUserAPIPermissionForEventsToInvokeLambda:
+    Condition: NotOnDevCond
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref SlackUserAPI
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt SlackUserAPIScheduledRule.Arn
+
+  SlackNameAPIScheduledRule:
+    Condition: NotOnDevCond
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: "ScheduledRule"
+      # http://docs.aws.amazon.com/zh_cn/AmazonCloudWatch/latest/events/ScheduledEvents.html
+      # m h dd mm ww yy
+      # ScheduleExpression: "cron(0 12 ? * MON-FRI *)"
+      ScheduleExpression: "cron(0/20 * * * ? *)"
+      State: "ENABLED"
+      Targets:
+        -
+          Arn: !GetAtt SlackNameAPI.Arn
+          Id: "SlackNameAPI"
+  SlackNameAPIPermissionForEventsToInvokeLambda:
+    Condition: NotOnDevCond
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref SlackNameAPI
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt SlackNameAPIScheduledRule.Arn
+
+
+  ###################################
+  ##### lambda error alarm #####
+  SlackUserParserCronJobAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmDescription: 'SlackUserParserCronJob function error alarm'
+      Namespace: 'AWS/Lambda'
+      MetricName: 'Errors'
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SlackUserParserCronJob
+      Statistic: 'Sum'
+      Period: 60
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      EvaluationPeriods: 1
+      AlarmActions:
+        - 'Fn::ImportValue': 'sns2slack'
+
+  SlackUserAPIAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmDescription: 'SlackUserAPI function error alarm'
+      Namespace: 'AWS/Lambda'
+      MetricName: 'Errors'
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SlackUserAPI
+      Statistic: 'Sum'
+      Period: 60
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      EvaluationPeriods: 1
+      AlarmActions:
+        - 'Fn::ImportValue': 'sns2slack'
+
+  SlackNameAPIAlarm:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmDescription: 'SlackNameAPI function error alarm'
+      Namespace: 'AWS/Lambda'
+      MetricName: 'Errors'
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SlackNameAPI
+      Statistic: 'Sum'
+      Period: 60
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 1
+      EvaluationPeriods: 1
+      AlarmActions:
+        - 'Fn::ImportValue': 'sns2slack'
+
+
+  # ApiGatewayCloudWatchLogsRole:
+  #   Type: 'AWS::IAM::Role'
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Version: '2012-10-17'
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service:
+  #             - apigateway.amazonaws.com
+  #           Action:
+  #           - sts:AssumeRole
+  #     Policies:
+  #       - PolicyName: ApiGatewayLogsPolicy
+  #         PolicyDocument:
+  #           Version: '2012-10-17'
+  #           Statement:
+  #             - Effect: Allow
+  #               Action:
+  #                 - logs:CreateLogGroup
+  #                 - logs:CreateLogStream
+  #                 - logs:DescribeLogGroups
+  #                 - logs:DescribeLogStreams
+  #                 - logs:PutLogEvents
+  #                 - logs:GetLogEvents
+  #                 - logs:FilterLogEvents
+  #               Resource: "*"
+  #
+  # ApiGatewayAccount:
+  #   Type: 'AWS::ApiGateway::Account'
+  #   Properties:
+  #     CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchLogsRole.Arn

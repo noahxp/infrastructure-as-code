@@ -1,0 +1,88 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'the default lambda function policy for cross project.'
+
+# environment type & bash parameters
+Parameters:
+  EnvType:
+    Type: String
+    Description: '(*)Environment Type for this Stack.'
+    ConstraintDescription: 'must specify prod, stag or dev.'
+    Default: 'dev'
+    AllowedValues:
+      - 'prod'
+      - 'stag'
+      - 'dev'
+
+Resources:
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      # RoleName: !Sub '${AWS::StackName}-${EnvType}-EC2Role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: 'Allow'
+            Principal:
+              Service: 'lambda.amazonaws.com'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        -
+          PolicyName: !Sub '${AWS::StackName}-${EnvType}-LambdaExecutionRole'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: 'Allow'
+                Action:
+                  - 'ec2:CreateNetworkInterface'
+                  - 'ec2:DescribeNetworkInterfaces'
+                  - 'ec2:DeleteNetworkInterface'
+                Resource: '*'
+        -
+          PolicyName: !Sub '${AWS::StackName}-${EnvType}-LambdaDynamoDBRole'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: 'Allow'
+                Action:
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:DeleteItem'
+                  - 'dynamodb:Query'
+                Resource: '*'
+        -
+          PolicyName: !Sub '${AWS::StackName}-${EnvType}-KMSRole'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: 'Allow'
+                Action:
+                  - 'KMS:Encrypt'
+                  - 'KMS:Decrypt'
+                Resource: '*'
+        -
+          PolicyName: !Sub '${AWS::StackName}-${EnvType}-LambdaSNSRole'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: 'Allow'
+                Action:
+                  - 'sns:Publish'
+                Resource:
+                  - 'Fn::ImportValue': 'sns2slack'
+
+Outputs:
+  LambdaExecutionRole:
+    Value: !Ref LambdaExecutionRole
+    Export:
+      Name: !Sub '${EnvType}-LambdaExecutionRole'
+  LambdaExecutionRoleArn:
+    Value: !GetAtt LambdaExecutionRole.Arn
+    Export:
+      Name: !Sub '${EnvType}-LambdaExecutionRoleArn'
