@@ -339,8 +339,16 @@ Resources:
             Effect: 'Allow'
             Principal: '*'
             Action:
-              - '*'
-            Resource: '*'
+              # - '*'
+              - 'dynamodb:GetItem'
+              - 'dynamodb:PutItem'
+              - 'dynamodb:UpdateItem'
+              - 'dynamodb:BatchGetItem'
+              - 'dynamodb:DeleteGetItem'
+              - 'dynamodb:Query'
+            # Resource: '*'
+            Resource:
+              - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*'
       RouteTableIds:
         - !Ref 'PrivateRouteTable1A'
         - !Ref 'PrivateRouteTable1B'
