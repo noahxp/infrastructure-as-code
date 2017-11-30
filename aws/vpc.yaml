@@ -67,6 +67,26 @@ Resources:
           Key: Name
           Value: !Sub '${EnvType}-vpc'
 
+  VPCDHCPOptions:
+    Type: "AWS::EC2::DHCPOptions"
+    Properties:
+      DomainName: !Sub '${AWS::Region}.compute.internal'
+      DomainNameServers:
+        - 'AmazonProvidedDNS'
+      # 169.254.169.123 is aws time sync service
+      NtpServers:
+        - '169.254.169.123'
+      Tags:
+        -
+          Key: Name
+          Value: !Sub '${EnvType}-vpc-dhcp-otpions-set'
+
+  VPCDHCPOptionsAssociation:
+    Type: "AWS::EC2::VPCDHCPOptionsAssociation"
+    Properties:
+      DhcpOptionsId: !Ref VPCDHCPOptions
+      VpcId: !Ref VPC
+
 
   ##### Subnets #####
   # create public subnet - first AZ
