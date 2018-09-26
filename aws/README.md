@@ -7,8 +7,9 @@
   * [natgateway](natgateway.yaml) 基礎 nat-gateway 設定，包含 2 個 nat-gateway 及 所需的 eip 與 nat-subnet over nat-gateway 的 route table
   * [bastion](bastion.yaml) Bastion 設定，包含 1 台 ec2 當 bastion 機及 所需的 security group，需先備好 ec2 keypair 方能在起 bastion server 時即把 ssh key 放進去
   * [alb](alb.yaml) Application Load Balancer(ALB) 設定，可設定是提供給 ECS 使用，還是 EC2 使用，並可指定 EC2/ECS 是放在 private subnet 1 還是 private subnet 2 ，會設定對映的 security group .
-  * [asg][asg.yaml] Auto Scaling Group 及 Launch Configuration 與 EC2 所擁有的 IAM Role
+  * [asg](asg.yaml) Auto Scaling Group 及 Launch Configuration 與 EC2 所擁有的 IAM Role
   * [asg-scaling-policy](asg-scaling-policy.yaml) ASG 用的 ScalingPolicy，範例中提供三種 scaling 方式 : Simple Scaling , Step Scaling , Scheduled Action
+  * [codedeploy](codedeploy.yaml) 搭配 https://github.com/noahxp/codedeploy 專案用的範例
 
 * 其他資源
   * [awslogs](awslogs) aws logs agent configuration example file
