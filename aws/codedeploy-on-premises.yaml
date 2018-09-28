@@ -1,0 +1,196 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CI/CD On-Premises (IAM User ARN)'
+
+# environment type & bash parameters
+Parameters:
+  TagName:
+    Type: String
+    Description: 'public tags name'
+    Default: ''
+
+  BothUserGroup:
+    Type: String
+    Description: 'CI & CD User Group'
+    Default: ''
+
+  CIUser:
+    Type: String
+    Description: 'CI Tools IAM user name'
+    Default: ''
+
+  CDUser:
+    Type: String
+    Description: 'CodeDeploy IAM user name'
+    Default: ''
+
+  S3BucketName:
+    Type: String
+    Description: 's3 bucket name'
+    Default: ''
+
+  CDApplication:
+    Type: String
+    Description: 'CodeDeploy Application name'
+    Default: ''
+
+  DeployGroup:
+    Type: String
+    Description: 'Deployment Group name'
+    Default: 'master'
+
+
+Resources:
+  CICDGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: !Sub '${BothUserGroup}'
+
+
+  CIIAMUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Sub '${CIUser}'
+      Groups:
+      - !Ref CICDGroup
+      Policies:
+      - PolicyName: !Sub '${AWS::StackName}-s3-policy'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: 'Allow'
+            Action:
+            - 's3:AbortMultipartUpload'
+            - 's3:DeleteObject'
+            - 's3:GetObject'
+            - 's3:GetObjectAcl'
+            - 's3:PutObject'
+            - 's3:PutObjectAcl'
+            Resource: !Sub 'arn:aws:s3:::${S3Bucket}/*'
+      ManagedPolicyArns:
+      - 'arn:aws:iam::aws:policy/AWSCodeDeployDeployerAccess'
+
+
+  CDIAMUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Sub '${CDUser}'
+      Groups:
+      - !Ref CICDGroup
+      ManagedPolicyArns:
+      - 'arn:aws:iam::aws:policy/AWSCodeDeployDeployerAccess'
+      Policies:
+      - PolicyName: !Sub '${AWS::StackName}-s3-policy'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: 'Allow'
+            Action:
+            - 's3:Get*'
+            - 's3:List*'
+            Resource:
+            - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+            - 'arn:aws:s3:::aws-codedeploy-ap-northeast-1/*'
+      # This permission is not required to register with another user.
+      - PolicyName: !Sub '${AWS::StackName}-codedeploy-register-and-deregiester-policy'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: 'Allow'
+            Action:
+            - 'iam:GetUser'
+            - 'tag:GetTags'
+            - 'tag:GetResources'
+            - 'codedeploy:RemoveTagsFromOnPremisesInstances'
+            - 'codedeploy:DeregisterOnPremisesInstance'
+            - 'codedeploy:AddTagsToOnPremisesInstances'
+            - 'codedeploy:RegisterOnPremisesInstance'
+            Resource: '*'
+
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      Tags:
+      - Key: 'Name'
+        Value: !Sub '${TagName}'
+      BucketName: !Sub '${S3BucketName}'
+      LifecycleConfiguration:
+        Rules:
+        - ExpirationInDays: 365
+          Status: Enabled
+        - AbortIncompleteMultipartUpload:
+            DaysAfterInitiation: 30
+          Status: Enabled
+
+
+  CodeDeployApplication:
+    Type: "AWS::CodeDeploy::Application"
+    Properties:
+      ApplicationName: !Sub '${CDApplication}'
+
+
+  DeploymentGroup:
+    Type: "AWS::CodeDeploy::DeploymentGroup"
+    Properties:
+      DeploymentGroupName: !Sub '${DeployGroup}'
+      ApplicationName: !Ref CodeDeployApplication
+      DeploymentConfigName: 'CodeDeployDefault.OneAtATime'
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+
+
+  CodeDeployServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: 'Allow'
+          Action: 'sts:AssumeRole'
+          Principal:
+            Service:
+            # codedeploy.amazonaws.com for all supported endpoints, codedeploy.XXX.amazonaws.com for special endpoints , reference : http://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-service-role.html
+            - codedeploy.amazonaws.com
+      ManagedPolicyArns:
+      - 'arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole'
+      Policies:
+      - PolicyName: !Sub '${AWS::StackName}-CodeDeployPolicy'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: 'Allow'
+            Action:
+            - 'sns:Publish'
+            Resource: '*'
+
+
+
+Outputs:
+  CIIAMUser:
+    Value: !Ref CIIAMUser
+    Export:
+      Name: !Sub '${AWS::StackName}-CIIAMUser'
+
+  CDIAMUser:
+    Value: !Ref CDIAMUser
+    Export:
+      Name: !Sub '${AWS::StackName}-CDIAMUser'
+
+  S3Bucket:
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Sub '${AWS::StackName}-S3Bucket'
+
+  CodeDeployApplication:
+    Value: !Ref CodeDeployApplication
+    Export:
+      Name: !Sub '${AWS::StackName}-CodeDeployApplication'
+
+  DeploymentGroup:
+    Value: !Ref DeploymentGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-DeploymentGroup'
+
+
+
