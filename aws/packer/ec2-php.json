@@ -3,8 +3,7 @@
     "aws_access_key": null,
     "aws_secret_key": null,
     "aws_region": null,
-    "aws_base_ami": null,
-    "spot_price": null
+    "aws_base_ami": null
  },
  "builders": [{
    "type": "amazon-ebs",
@@ -15,7 +14,8 @@
    "instance_type": "t2.micro",
    "ssh_username": "ec2-user",
    "ami_name": "dev-web-{{isotime \"2006-01-02\"}}",
-   "spot_price":"{{user `spot_price`}}"
+   "spot_price":"auto",
+   "spot_price_auto_product":"Linux/UNIX"
  }],
  "provisioners" : [
   {
