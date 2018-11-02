@@ -13,18 +13,22 @@ The build script :
 @2018-10 , THE_LASTEST_AMI 2 is : ami-04d3eb2e1993f679b
 eof
 
+set -e
 
 # system update
 sudo yum -y update
 
 # php install
 sudo yum -y install httpd php
-sudo echo "<?php echo gethostname(); ?>" > /var/www/html/index.php
+#sudo echo "<?php echo gethostname(); ?>" > /var/www/html/index.php
+sudo tee /var/www/html/index.php <<EOF
+<?php echo gethostname(); ?>
+EOF
 sudo service httpd start
 sudo chkconfig httpd on
 
 # install code deploy agent
 sudo yum -y install ruby
-curl -o install https://aws-codedeploy-us-west-2.s3.amazonaws.com/latest/install
+curl -o install https://aws-codedeploy-ap-northeast-1.s3.amazonaws.com/latest/install
 chmod +x ./install
 sudo ./install auto
