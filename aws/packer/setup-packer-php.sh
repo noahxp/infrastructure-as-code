@@ -24,6 +24,40 @@ sudo yum -y install httpd php
 sudo tee /var/www/html/index.php <<EOF
 <?php echo gethostname(); ?>
 EOF
+sudo tee /var/www/html/pi.php <<EOF
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body {
+    background: #555;
+    text-align:center;
+}
+</style>
+</head>
+<body>
+<?php
+\$start = microtime(true);
+print gethostname();
+print "<hr>\n";
+
+\$pi = 4; \$top = 4; \$bot = 3; \$minus = TRUE;
+\$accuracy = 10000000;
+for(\$i = 0; \$i < \$accuracy; \$i++)
+{
+  \$pi += ( \$minus ? -(\$top/\$bot) : (\$top/\$bot) );
+  \$minus = ( \$minus ? FALSE : TRUE);
+  \$bot += 2;
+}
+print "Pi ~=: " . \$pi;
+print "<hr>\n";
+
+phpinfo();
+?>
+</body>
+</html>
+EOF
+
 sudo service httpd start
 sudo chkconfig httpd on
 
