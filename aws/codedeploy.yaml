@@ -29,6 +29,12 @@ Parameters:
     Description: 'The secondary AutoScalingGroup Stack.'
     Default: ''
 
+  UseALB:
+    Type: String
+    Description: 'CodeDeploy Integration to ALB'
+    AllowedValues: ['yes', 'no']
+    Default: 'no'
+
   SNSStack:
     Type: String
     Description: 'notification to slack'
@@ -40,6 +46,7 @@ Conditions:
   AsgStackCond:  !Not [ !Equals [ !Ref AsgStack, '' ] ]
   AsgStack2Cond: !Not [ !Equals [ !Ref AsgStack2, '' ] ]
   SNSStackCond: !Equals [ !Ref SNSStack, 'yes' ]
+  ALBCond: !Equals [ !Ref SNSStack, 'yes' ]
 
 
 Resources:
@@ -66,15 +73,20 @@ Resources:
           - AsgStack2Cond
           - 'Fn::ImportValue': !Sub '${AsgStack2}-${EnvType}-ASG'
           - !Ref "AWS::NoValue"
-      # Deployment:
-      #   Description: "A sample deployment"
-      #   IgnoreApplicationStopFailures: false
-      #   S3Location:
-      #     Bucket: String
-      #     BundleType: String
-      #     ETag: String
-      #     Key: String
-      #     Version: String
+      LoadBalancerInfo:
+#        for CLB
+#        ElbInfoList:
+#          - Name: !GetAtt NetworkLoadBalancer.LoadBalancerName
+#        for ALB, NLB
+#        TargetGroupInfoList:
+#          - Name: !GetAtt NLBTargetGroup.TargetGroupName
+        TargetGroupInfoList:
+          - !If
+            - ALBCond
+            - Name: 'Fn::ImportValue': !Sub '${AsgStack2}-${EnvType}-ALB-TG'
+            - !Ref "AWS::NoValue"
+      DeploymentStyle:
+        DeploymentOption: WITH_TRAFFIC_CONTROL
       DeploymentConfigName: "CodeDeployDefault.OneAtATime"
       ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
       # reference : http://docs.aws.amazon.com/codedeploy/latest/APIReference/API_TriggerConfig.html
@@ -114,14 +126,15 @@ Resources:
                 - codedeploy.amazonaws.com
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole'
-      Policies:
-        -
-          PolicyName: !Sub '${AWS::StackName}-${EnvType}-CodeDeployPolicy'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              -
-                Effect: 'Allow'
-                Action:
-                  - 'sns:Publish'
-                Resource: '*'
+      # AWSCodeDeployRole already include the sns:Publish policy
+#      Policies:
+#        -
+#          PolicyName: !Sub '${AWS::StackName}-${EnvType}-CodeDeployPolicy'
+#          PolicyDocument:
+#            Version: '2012-10-17'
+#            Statement:
+#              -
+#                Effect: 'Allow'
+#                Action:
+#                  - 'sns:Publish'
+#                Resource: '*'
