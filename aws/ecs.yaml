@@ -120,12 +120,12 @@ Parameters:
     Description: Optional - Specifies the Type of (Amazon EBS) volume
     Default: ''
     AllowedValues:
-      - ''
-      - standard
-      - io1
-      - gp2
-      - sc1
-      - st1
+    - ''
+    - standard
+    - io1
+    - gp2
+    - sc1
+    - st1
     ConstraintDescription: Must be a valid EC2 volume type.
   DeviceName:
     Type: String
@@ -144,8 +144,8 @@ Parameters:
     Type: String
     Default: 'diversified'
     AllowedValues:
-      - 'lowestPrice'
-      - 'diversified'
+    - 'lowestPrice'
+    - 'diversified'
 Conditions:
   CreateEC2LCWithKeyPair:
     !Not [!Equals [!Ref KeyName, '']]
@@ -156,18 +156,18 @@ Conditions:
   CreateNewVpc:
     !Equals [!Ref VpcId, '']
   CreateSubnet1: !And
-    - !Not [!Equals [!Ref SubnetCidr1, '']]
-    - !Condition CreateNewVpc
+  - !Not [!Equals [!Ref SubnetCidr1, '']]
+  - !Condition CreateNewVpc
   CreateSubnet2: !And
-    - !Not [!Equals [!Ref SubnetCidr2, '']]
-    - !Condition CreateSubnet1
+  - !Not [!Equals [!Ref SubnetCidr2, '']]
+  - !Condition CreateSubnet1
   CreateSubnet3: !And
-    - !Not [!Equals [!Ref SubnetCidr3, '']]
-    - !Condition CreateSubnet2
+  - !Not [!Equals [!Ref SubnetCidr3, '']]
+  - !Condition CreateSubnet2
   CreateEbsVolume: !And
-    - !Not [!Equals [!Ref EbsVolumeSize, '0']]
-    - !Not [!Equals [!Ref EbsVolumeType, '']]
-    - !Not [!Equals [!Ref DeviceName, '']]
+  - !Not [!Equals [!Ref EbsVolumeSize, '0']]
+  - !Not [!Equals [!Ref EbsVolumeType, '']]
+  - !Not [!Equals [!Ref DeviceName, '']]
   CreateWithSpot: !Equals [!Ref UseSpot, 'true']
   CreateWithASG: !Not [!Condition CreateWithSpot]
 Resources:
@@ -264,49 +264,46 @@ Resources:
       KeyName: !If [ CreateEC2LCWithKeyPair, !Ref KeyName, !Ref "AWS::NoValue" ]
       SecurityGroups: [ !If [ CreateNewSecurityGroup, !Ref EcsSecurityGroup, !Ref SecurityGroupId ] ]
       BlockDeviceMappings: !If
-        - CreateEbsVolume
-        -
-          - DeviceName: !Ref DeviceName
-            Ebs:
-             VolumeSize: !Ref EbsVolumeSize
-             VolumeType: !Ref EbsVolumeType
-        - !Ref "AWS::NoValue"
+      - CreateEbsVolume
+      - - DeviceName: !Ref DeviceName
+          Ebs:
+            VolumeSize: !Ref EbsVolumeSize
+            VolumeType: !Ref EbsVolumeType
+      - !Ref "AWS::NoValue"
       UserData: !If
-        - SetEndpointToECSAgent
-        - Fn::Base64: !Sub |
-           #!/bin/bash
-           echo ECS_CLUSTER=${EcsClusterName} >> /etc/ecs/ecs.config
-           echo ECS_BACKEND_HOST=${EcsEndpoint} >> /etc/ecs/ecs.config
-        - Fn::Base64: !Sub |
-           #!/bin/bash
-           echo ECS_CLUSTER=${EcsClusterName} >> /etc/ecs/ecs.config
+      - SetEndpointToECSAgent
+      - Fn::Base64: !Sub |
+          #!/bin/bash
+          echo ECS_CLUSTER=${EcsClusterName} >> /etc/ecs/ecs.config
+          echo ECS_BACKEND_HOST=${EcsEndpoint} >> /etc/ecs/ecs.config
+      - Fn::Base64: !Sub |
+          #!/bin/bash
+          echo ECS_CLUSTER=${EcsClusterName} >> /etc/ecs/ecs.config
   EcsInstanceAsg:
     Type: AWS::AutoScaling::AutoScalingGroup
     Condition: CreateWithASG
     Properties:
       VPCZoneIdentifier: !If
-        - CreateSubnet1
+      - CreateSubnet1
+      - !If
+        - CreateSubnet2
         - !If
-          - CreateSubnet2
-          - !If
-            - CreateSubnet3
-            - [ !Sub "${PubSubnetAz1}, ${PubSubnetAz2}, ${PubSubnetAz3}" ]
-            - [ !Sub "${PubSubnetAz1}, ${PubSubnetAz2}" ]
-          - [ !Sub "${PubSubnetAz1}" ]
-        - !Ref SubnetIds
+          - CreateSubnet3
+          - [ !Sub "${PubSubnetAz1}, ${PubSubnetAz2}, ${PubSubnetAz3}" ]
+          - [ !Sub "${PubSubnetAz1}, ${PubSubnetAz2}" ]
+        - [ !Sub "${PubSubnetAz1}" ]
+      - !Ref SubnetIds
       LaunchConfigurationName: !Ref EcsInstanceLc
       MinSize: '0'
       MaxSize: !Ref AsgMaxSize
       DesiredCapacity: !Ref AsgMaxSize
       Tags:
-        -
-          Key: Name
-          Value: !Sub "ECS Instance - ${AWS::StackName}"
-          PropagateAtLaunch: 'true'
-        -
-          Key: Description
-          Value: "This instance is the part of the Auto Scaling group which was created through ECS Console"
-          PropagateAtLaunch: 'true'
+      - Key: Name
+        Value: !Sub "ECS Instance - ${AWS::StackName}"
+        PropagateAtLaunch: 'true'
+      - Key: Description
+        Value: "This instance is the part of the Auto Scaling group which was created through ECS Console"
+        PropagateAtLaunch: 'true'
   EcsSpotFleet:
     Condition: CreateWithSpot
     Type: AWS::EC2::SpotFleet
@@ -318,84 +315,82 @@ Resources:
         SpotPrice: !Ref SpotPrice
         TerminateInstancesWithExpiration: true
         LaunchSpecifications:
-            -
-              IamInstanceProfile:
-                Arn: !Sub 'arn:aws:iam::${AWS::AccountId}:instance-profile/${IamRoleInstanceProfile}'
-              ImageId: !Ref EcsAmiId
-              InstanceType: !Select [ 0, !Ref EcsInstanceType ]
-              KeyName: !If [ CreateEC2LCWithKeyPair, !Ref KeyName, !Ref "AWS::NoValue" ]
-              Monitoring:
-                Enabled: true
-              SecurityGroups:
-                - GroupId: !If [ CreateNewSecurityGroup, !Ref EcsSecurityGroup, !Ref SecurityGroupId ]
-              SubnetId: !If
-                      - CreateSubnet1
-                      - !If
-                        - CreateSubnet2
-                        - !If
-                          - CreateSubnet3
-                          - !Join [ "," , [ !Ref PubSubnetAz1, !Ref PubSubnetAz2, !Ref PubSubnetAz3 ] ]
-                          - !Join [ "," , [ !Ref PubSubnetAz1, !Ref PubSubnetAz2 ] ]
-                        - !Ref PubSubnetAz1
-                      - !Join [ "," , !Ref SubnetIds ]
-              BlockDeviceMappings: !If
-                      - CreateEbsVolume
-                      -
-                        - DeviceName: !Ref DeviceName
-                          Ebs:
-                           VolumeSize: !Ref EbsVolumeSize
-                           VolumeType: !Ref EbsVolumeType
-                           DeleteOnTermination: true
-                      - !Ref "AWS::NoValue"
-              UserData:
-                    Fn::Base64: !Sub |
-                                  #!/bin/bash
-                                  echo ECS_CLUSTER=${EcsClusterName} >> /etc/ecs/ecs.config
-                                  if [ "${EcsEndpoint}" != "" ]; then
-                                    echo ECS_BACKEND_HOST=${EcsEndpoint} >> /etc/ecs/ecs.config
-                                  fi
-                                  export PATH=/usr/local/bin:$PATH
-                                  yum -y install jq
-                                  easy_install pip
-                                  pip install awscli
-                                  aws configure set default.region ${AWS::Region}
-                                  cat <<EOF > /etc/init/spot-instance-termination-notice-handler.conf
-                                  description "Start spot instance termination handler monitoring script"
-                                  author "Amazon Web Services"
-                                  start on started ecs
-                                  script
-                                  echo $$ > /var/run/spot-instance-termination-notice-handler.pid
-                                  exec /usr/local/bin/spot-instance-termination-notice-handler.sh
-                                  end script
-                                  pre-start script
-                                  logger "[spot-instance-termination-notice-handler.sh]: spot instance termination
-                                  notice handler started"
-                                  end script
-                                  EOF
-                                  cat <<EOF > /usr/local/bin/spot-instance-termination-notice-handler.sh
-                                  #!/bin/bash
-                                  while sleep 5; do
-                                  if [ -z \$(curl -Isf http://169.254.169.254/latest/meta-data/spot/termination-time)]; then
-                                  /bin/false
-                                  else
-                                  logger "[spot-instance-termination-notice-handler.sh]: spot instance termination notice detected"
-                                  STATUS=DRAINING
-                                  ECS_CLUSTER=\$(curl -s http://localhost:51678/v1/metadata | jq .Cluster | tr -d \")
-                                  CONTAINER_INSTANCE=\$(curl -s http://localhost:51678/v1/metadata | jq .ContainerInstanceArn | tr -d \")
-                                  logger "[spot-instance-termination-notice-handler.sh]: putting instance in state \$STATUS"
+        - IamInstanceProfile:
+            Arn: !Sub 'arn:aws:iam::${AWS::AccountId}:instance-profile/${IamRoleInstanceProfile}'
+          ImageId: !Ref EcsAmiId
+          InstanceType: !Select [ 0, !Ref EcsInstanceType ]
+          KeyName: !If [ CreateEC2LCWithKeyPair, !Ref KeyName, !Ref "AWS::NoValue" ]
+          Monitoring:
+            Enabled: true
+          SecurityGroups:
+          - GroupId: !If [ CreateNewSecurityGroup, !Ref EcsSecurityGroup, !Ref SecurityGroupId ]
+          SubnetId: !If
+          - CreateSubnet1
+          - !If
+            - CreateSubnet2
+            - !If
+              - CreateSubnet3
+              - !Join [ "," , [ !Ref PubSubnetAz1, !Ref PubSubnetAz2, !Ref PubSubnetAz3 ] ]
+              - !Join [ "," , [ !Ref PubSubnetAz1, !Ref PubSubnetAz2 ] ]
+            - !Ref PubSubnetAz1
+          - !Join [ "," , !Ref SubnetIds ]
+          BlockDeviceMappings: !If
+          - CreateEbsVolume
+          - - DeviceName: !Ref DeviceName
+              Ebs:
+                VolumeSize: !Ref EbsVolumeSize
+                VolumeType: !Ref EbsVolumeType
+                DeleteOnTermination: true
+          - !Ref "AWS::NoValue"
+          UserData:
+            Fn::Base64: !Sub |
+              #!/bin/bash
+              echo ECS_CLUSTER=${EcsClusterName} >> /etc/ecs/ecs.config
+              if [ "${EcsEndpoint}" != "" ]; then
+                echo ECS_BACKEND_HOST=${EcsEndpoint} >> /etc/ecs/ecs.config
+              fi
+              export PATH=/usr/local/bin:$PATH
+              yum -y install jq
+              easy_install pip
+              pip install awscli
+              aws configure set default.region ${AWS::Region}
+              cat <<EOF > /etc/init/spot-instance-termination-notice-handler.conf
+              description "Start spot instance termination handler monitoring script"
+              author "Amazon Web Services"
+              start on started ecs
+              script
+              echo $$ > /var/run/spot-instance-termination-notice-handler.pid
+              exec /usr/local/bin/spot-instance-termination-notice-handler.sh
+              end script
+              pre-start script
+              logger "[spot-instance-termination-notice-handler.sh]: spot instance termination
+              notice handler started"
+              end script
+              EOF
+              cat <<EOF > /usr/local/bin/spot-instance-termination-notice-handler.sh
+              #!/bin/bash
+              while sleep 5; do
+              if [ -z \$(curl -Isf http://169.254.169.254/latest/meta-data/spot/termination-time)]; then
+              /bin/false
+              else
+              logger "[spot-instance-termination-notice-handler.sh]: spot instance termination notice detected"
+              STATUS=DRAINING
+              ECS_CLUSTER=\$(curl -s http://localhost:51678/v1/metadata | jq .Cluster | tr -d \")
+              CONTAINER_INSTANCE=\$(curl -s http://localhost:51678/v1/metadata | jq .ContainerInstanceArn | tr -d \")
+              logger "[spot-instance-termination-notice-handler.sh]: putting instance in state \$STATUS"
 
-                                  if [ "${EcsEndpoint}" != "" ]; then
-                                      /usr/local/bin/aws --endpoint-url https://${EcsEndpoint} ecs update-container-instances-state --cluster \$ECS_CLUSTER --container-instances \$CONTAINER_INSTANCE --status \$STATUS
-                                  else
-                                      /usr/local/bin/aws ecs update-container-instances-state --cluster \$ECS_CLUSTER --container-instances \$CONTAINER_INSTANCE --status \$STATUS
-                                  fi
+              if [ "${EcsEndpoint}" != "" ]; then
+                  /usr/local/bin/aws --endpoint-url https://${EcsEndpoint} ecs update-container-instances-state --cluster \$ECS_CLUSTER --container-instances \$CONTAINER_INSTANCE --status \$STATUS
+              else
+                  /usr/local/bin/aws ecs update-container-instances-state --cluster \$ECS_CLUSTER --container-instances \$CONTAINER_INSTANCE --status \$STATUS
+              fi
 
-                                  logger "[spot-instance-termination-notice-handler.sh]: putting myself to sleep..."
-                                  sleep 120 # exit loop as instance expires in 120 secs after terminating notification
-                                  fi
-                                  done
-                                  EOF
-                                  chmod +x /usr/local/bin/spot-instance-termination-notice-handler.sh
+              logger "[spot-instance-termination-notice-handler.sh]: putting myself to sleep..."
+              sleep 120 # exit loop as instance expires in 120 secs after terminating notification
+              fi
+              done
+              EOF
+              chmod +x /usr/local/bin/spot-instance-termination-notice-handler.sh
 
 Outputs:
   EcsInstanceAsgName:
@@ -403,9 +398,9 @@ Outputs:
     Description: Auto Scaling Group Name for ECS Instances
     Value: !Ref EcsInstanceAsg
   EcsSpotFleetRequestId:
-      Condition: CreateWithSpot
-      Description: Spot Fleet Request for ECS Instances
-      Value: !Ref EcsSpotFleet
+    Condition: CreateWithSpot
+    Description: Spot Fleet Request for ECS Instances
+    Value: !Ref EcsSpotFleet
   UsedByECSCreateCluster:
     Description: Flag used by EC2 Container Service Create Cluster Wizard
     Value: 'true'
