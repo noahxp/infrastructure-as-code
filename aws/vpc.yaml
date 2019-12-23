@@ -13,9 +13,9 @@ Parameters:
     ConstraintDescription: 'must specify prod, stag or dev.'
     Default: 'dev'
     AllowedValues:
-      - 'prod'
-      - 'stag'
-      - 'dev'
+    - 'prod'
+    - 'stag'
+    - 'dev'
 
 # parameters for env-type
 Mappings:
@@ -63,21 +63,21 @@ Resources:
       EnableDnsHostnames: true
       InstanceTenancy: 'default'
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-vpc'
+      - Key: Name
+        Value: !Sub '${EnvType}-vpc'
 
   VPCDHCPOptions:
     Type: "AWS::EC2::DHCPOptions"
     Properties:
       DomainName: !Sub '${AWS::Region}.compute.internal'
       DomainNameServers:
-        - 'AmazonProvidedDNS'
+      - 'AmazonProvidedDNS'
       # 169.254.169.123 is aws time sync service
       NtpServers:
-        - '169.254.169.123'
+      - '169.254.169.123'
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-vpc-dhcp-otpions-set'
+      - Key: Name
+        Value: !Sub '${EnvType}-vpc-dhcp-otpions-set'
 
   VPCDHCPOptionsAssociation:
     Type: "AWS::EC2::VPCDHCPOptionsAssociation"
@@ -95,8 +95,8 @@ Resources:
       CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PublicSubnetA' ]
       MapPublicIpOnLaunch: true
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-public-a'
+      - Key: Name
+        Value: !Sub '${EnvType}-public-a'
       VpcId: !Ref 'VPC'
 
   # create public subnet - second AZ
@@ -107,8 +107,8 @@ Resources:
       CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PublicSubnetB' ]
       MapPublicIpOnLaunch: true
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-public-b'
+      - Key: Name
+        Value: !Sub '${EnvType}-public-b'
       VpcId: !Ref 'VPC'
 
   # create first layer private subnet - first AZ
@@ -119,8 +119,8 @@ Resources:
       CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PrivateSubnet1A' ]
       MapPublicIpOnLaunch: false
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-private-1a'
+      - Key: Name
+        Value: !Sub '${EnvType}-private-1a'
       VpcId: !Ref 'VPC'
 
   # create first layer private subnet - second AZ
@@ -131,8 +131,8 @@ Resources:
       CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PrivateSubnet1B' ]
       MapPublicIpOnLaunch: false
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-private-1b'
+      - Key: Name
+        Value: !Sub '${EnvType}-private-1b'
       VpcId: !Ref 'VPC'
 
   # create second layer private subnet - first AZ
@@ -143,8 +143,8 @@ Resources:
       CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PrivateSubnet2A' ]
       MapPublicIpOnLaunch: false
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-private-2a'
+      - Key: Name
+        Value: !Sub '${EnvType}-private-2a'
       VpcId: !Ref 'VPC'
 
   # create second layer private subnet - second AZ
@@ -155,8 +155,8 @@ Resources:
       CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'PrivateSubnet2B' ]
       MapPublicIpOnLaunch: false
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-private-2b'
+      - Key: Name
+        Value: !Sub '${EnvType}-private-2b'
       VpcId: !Ref 'VPC'
 
   # create nat layer subnet - first AZ
@@ -167,8 +167,8 @@ Resources:
       CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'NatSubnetA' ]
       MapPublicIpOnLaunch: false
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-nat-a'
+      - Key: Name
+        Value: !Sub '${EnvType}-nat-a'
       VpcId: !Ref 'VPC'
 
   # create nat layer subnet - second AZ
@@ -179,8 +179,8 @@ Resources:
       CidrBlock: !FindInMap [ 'CIDR', Ref: EnvType, 'NatSubnetB' ]
       MapPublicIpOnLaunch: false
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-nat-b'
+      - Key: Name
+        Value: !Sub '${EnvType}-nat-b'
       VpcId: !Ref 'VPC'
 
 
@@ -189,8 +189,8 @@ Resources:
     Type: 'AWS::EC2::InternetGateway'
     Properties:
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-igw'
+      - Key: Name
+        Value: !Sub '${EnvType}-igw'
 
   # IGW attach to VPC
   VPCGatewayAttachment:
@@ -207,8 +207,8 @@ Resources:
     Type: 'AWS::EC2::RouteTable'
     Properties:
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-public-rt'
+      - Key: Name
+        Value: !Sub '${EnvType}-public-rt'
       VpcId: !Ref 'VPC'
 
   # private route 1a - first
@@ -216,8 +216,8 @@ Resources:
     Type: 'AWS::EC2::RouteTable'
     Properties:
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-private-rt-1a'
+      - Key: Name
+        Value: !Sub '${EnvType}-private-rt-1a'
       VpcId: !Ref 'VPC'
 
   # private route 1b - second
@@ -225,8 +225,8 @@ Resources:
     Type: 'AWS::EC2::RouteTable'
     Properties:
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-private-rt-1b'
+      - Key: Name
+        Value: !Sub '${EnvType}-private-rt-1b'
       VpcId: !Ref 'VPC'
 
   # private route 2a - first
@@ -234,8 +234,8 @@ Resources:
     Type: 'AWS::EC2::RouteTable'
     Properties:
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-private-rt-2a'
+      - Key: Name
+        Value: !Sub '${EnvType}-private-rt-2a'
       VpcId: !Ref 'VPC'
 
   # private route 2b - second
@@ -243,9 +243,8 @@ Resources:
     Type: 'AWS::EC2::RouteTable'
     Properties:
       Tags:
-        -
-          Key: Name
-          Value: !Sub '${EnvType}-private-rt-2b'
+      - Key: Name
+        Value: !Sub '${EnvType}-private-rt-2b'
       VpcId: !Ref 'VPC'
 
   # nat route a
@@ -253,9 +252,8 @@ Resources:
     Type: 'AWS::EC2::RouteTable'
     Properties:
       Tags:
-        -
-          Key: Name
-          Value: !Sub '${EnvType}-nat-rt-a'
+      - Key: Name
+        Value: !Sub '${EnvType}-nat-rt-a'
       VpcId: !Ref 'VPC'
 
   # nat route b
@@ -263,9 +261,8 @@ Resources:
     Type: 'AWS::EC2::RouteTable'
     Properties:
       Tags:
-        -
-          Key: Name
-          Value: !Sub '${EnvType}-nat-rt-b'
+      - Key: Name
+        Value: !Sub '${EnvType}-nat-rt-b'
       VpcId: !Ref 'VPC'
 
 
@@ -298,16 +295,16 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Effect: 'Allow'
-            Principal: '*'
-            Action:
-              - 's3:*'
-            Resource: '*'
+        - Effect: 'Allow'
+          Principal: '*'
+          Action:
+          - 's3:*'
+          Resource: '*'
       RouteTableIds:
-        - !Ref 'PrivateRouteTable1A'
-        - !Ref 'PrivateRouteTable1B'
-        - !Ref 'PrivateRouteTable2A'
-        - !Ref 'PrivateRouteTable2B'
+      - !Ref 'PrivateRouteTable1A'
+      - !Ref 'PrivateRouteTable1B'
+      - !Ref 'PrivateRouteTable2A'
+      - !Ref 'PrivateRouteTable2B'
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
       VpcId: !Ref 'VPC'
 
@@ -317,25 +314,24 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          -
-            Effect: 'Allow'
-            Principal: '*'
-            Action:
-              # - '*'
-              - 'dynamodb:GetItem'
-              - 'dynamodb:PutItem'
-              - 'dynamodb:UpdateItem'
-              - 'dynamodb:BatchGetItem'
-              - 'dynamodb:DeleteGetItem'
-              - 'dynamodb:Query'
-            # Resource: '*'
-            Resource:
-              - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*'
+        - Effect: 'Allow'
+          Principal: '*'
+          Action:
+          # - '*'
+          - 'dynamodb:GetItem'
+          - 'dynamodb:PutItem'
+          - 'dynamodb:UpdateItem'
+          - 'dynamodb:BatchGetItem'
+          - 'dynamodb:DeleteGetItem'
+          - 'dynamodb:Query'
+          # Resource: '*'
+          Resource:
+          - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*'
       RouteTableIds:
-        - !Ref 'PrivateRouteTable1A'
-        - !Ref 'PrivateRouteTable1B'
-        - !Ref 'PrivateRouteTable2A'
-        - !Ref 'PrivateRouteTable2B'
+      - !Ref 'PrivateRouteTable1A'
+      - !Ref 'PrivateRouteTable1B'
+      - !Ref 'PrivateRouteTable2A'
+      - !Ref 'PrivateRouteTable2B'
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
       VpcId: !Ref 'VPC'
 
