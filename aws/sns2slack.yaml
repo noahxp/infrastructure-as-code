@@ -14,9 +14,9 @@ Parameters:
     ConstraintDescription: 'must specify prod, stag or dev.'
     Default: 'dev'
     AllowedValues:
-      - 'prod'
-      - 'stag'
-      - 'dev'
+    - 'prod'
+    - 'stag'
+    - 'dev'
 
 
 Resources:
@@ -38,9 +38,8 @@ Resources:
       #     ToPort: '443'
       #     CidrIp: '0.0.0.0/0'
       Tags:
-        -
-          Key: Name
-          Value: !Sub '${EnvType}-Sns2SlackSecurityGroup'
+      - Key: Name
+        Value: !Sub '${EnvType}-Sns2SlackSecurityGroup'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
 
@@ -51,25 +50,23 @@ Resources:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Action: 'sts:AssumeRole'
-            Effect: 'Allow'
-            Principal:
-              Service: 'lambda.amazonaws.com'
+        - Action: 'sts:AssumeRole'
+          Effect: 'Allow'
+          Principal:
+            Service: 'lambda.amazonaws.com'
       ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
       Policies:
-        -
-          PolicyName: !Sub '${AWS::StackName}-${EnvType}-LambdaExecutionRole'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              -
-                Effect: 'Allow'
-                Action:
-                  - 'ec2:CreateNetworkInterface'
-                  - 'ec2:DescribeNetworkInterfaces'
-                  - 'ec2:DeleteNetworkInterface'
-                Resource: '*'
+      - PolicyName: !Sub '${AWS::StackName}-${EnvType}-LambdaExecutionRole'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: 'Allow'
+            Action:
+            - 'ec2:CreateNetworkInterface'
+            - 'ec2:DescribeNetworkInterfaces'
+            - 'ec2:DeleteNetworkInterface'
+            Resource: '*'
 
   sns2slackFunction:
     Type: 'AWS::Lambda::Function'
@@ -210,8 +207,8 @@ Resources:
     Properties:
       DisplayName: 'sns to slack topic'
       Subscription:
-        - Endpoint: !GetAtt sns2slackFunction.Arn
-          Protocol: 'lambda'
+      - Endpoint: !GetAtt sns2slackFunction.Arn
+        Protocol: 'lambda'
 
   # ApplicationDeployerLambdaInvokePermission:
   lambdaInvokePermission:
