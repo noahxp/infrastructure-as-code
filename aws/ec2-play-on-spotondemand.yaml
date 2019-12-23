@@ -1,0 +1,1038 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: aws ec2 , Spot & On Demand Automatic conversion
+
+# environment type & bash parameters
+Parameters:
+  EnvType:
+    Type: String
+    Description: Environment Type for this Stack.
+    ConstraintDescription: must specify prod, stag or dev.
+    Default: dev
+    AllowedValues:
+    - prod
+    - stag
+    - dev
+  CreateNATGateway:
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+  MaxSize:
+    Type: Number
+    Description: '(*)asg max instance size'
+    Default: 0
+
+  MinSize:
+    Type: Number
+    Description: '(*)asg min instance size'
+    Default: 0
+
+  DesiredCapacity:
+    Type: Number
+    Description: '(*)asg desired capacity'
+    Default: 0
+
+  SpotPrice:
+    Type: Number
+    Description: '(*)asg desired capacity'
+    Default: 0.001
+
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: 'Basic Configuration'
+        Parameters:
+          - EnvType
+          - CreateNATGateway
+      -
+        Label:
+          default: 'AutoScaing Settings'
+        Parameters:
+          - MaxSize
+          - MinSize
+          - DesiredCapacity
+          - SpotPrice
+
+Mappings:
+  CIDR:
+    dev:
+      VPC: 172.16.0.0/16
+      PublicSubnetA: 172.16.10.0/24
+      PublicSubnetB: 172.16.20.0/24
+      PublicSubnetC: 172.16.30.0/24
+      PrivateSubnetA: 172.16.50.0/24
+      PrivateSubnetB: 172.16.60.0/24
+      PrivateSubnetC: 172.16.70.0/24
+      NatSubnetA: 172.16.210.0/24
+      NatSubnetB: 172.16.220.0/24
+      NatSubnetC: 172.16.230.0/24
+    stag:
+      VPC: 172.16.0.0/16
+      PublicSubnetA: 172.16.10.0/24
+      PublicSubnetB: 172.16.20.0/24
+      PublicSubnetC: 172.16.30.0/24
+      PrivateSubnetA: 172.16.50.0/24
+      PrivateSubnetB: 172.16.60.0/24
+      PrivateSubnetC: 172.16.70.0/24
+      NatSubnetA: 172.16.210.0/24
+      NatSubnetB: 172.16.220.0/24
+      NatSubnetC: 172.16.230.0/24
+    prod:
+      VPC: 172.16.0.0/16
+      PublicSubnetA: 172.16.10.0/24
+      PublicSubnetB: 172.16.20.0/24
+      PublicSubnetC: 172.16.30.0/24
+      PrivateSubnetA: 172.16.50.0/24
+      PrivateSubnetB: 172.16.60.0/24
+      PrivateSubnetC: 172.16.70.0/24
+      NatSubnetA: 172.16.210.0/24
+      NatSubnetB: 172.16.220.0/24
+      NatSubnetC: 172.16.230.0/24
+
+Conditions:
+  IsCreateNATGateway: !Equals [!Ref CreateNATGateway, true]
+
+##### create resource #####
+Resources:
+  ##### Network #####
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !FindInMap [ CIDR, Ref: EnvType, VPC ]
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-vpc
+
+  VPCDHCPOptions:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName: !Sub ${AWS::Region}.compute.internal
+      DomainNameServers:
+      - AmazonProvidedDNS
+      NtpServers:
+      - 169.254.169.123
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-dhcp-otpions-set
+
+  VPCDHCPOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      DhcpOptionsId: !Ref VPCDHCPOptions
+      VpcId: !Ref VPC
+
+
+  ### Subnets ###
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ CIDR, Ref: EnvType, PublicSubnetA ]
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-public-a
+      VpcId: !Ref VPC
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ CIDR, Ref: EnvType, PublicSubnetB ]
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-public-b
+      VpcId: !Ref VPC
+
+  PublicSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 2, !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ CIDR, Ref: EnvType, PublicSubnetC ]
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-public-b
+      VpcId: !Ref VPC
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ CIDR, Ref: EnvType, PrivateSubnetA ]
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-private-a
+      VpcId: !Ref VPC
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ CIDR, Ref: EnvType, PrivateSubnetB ]
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-private-b
+      VpcId: !Ref VPC
+
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 2, !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ CIDR, Ref: EnvType, PrivateSubnetC ]
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-private-c
+      VpcId: !Ref VPC
+
+  NatSubnetA:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ CIDR, Ref: EnvType, NatSubnetA ]
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-nat-a
+      VpcId: !Ref VPC
+
+  NatSubnetB:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ CIDR, Ref: EnvType, NatSubnetB ]
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-nat-b
+      VpcId: !Ref VPC
+
+  NatSubnetC:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 2, !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ CIDR, Ref: EnvType, NatSubnetC ]
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-nat-c
+      VpcId: !Ref VPC
+
+  ##### Internet Gateway(igw) #####
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-igw
+
+  # IGW attach to VPC
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+
+  NatEipA:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: !Ref VPC
+
+  NatEipB:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: !Ref VPC
+
+  NatEipC:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: !Ref VPC
+
+  NatGatewayA:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEipA.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-NatGatewayA
+
+  NatGatewayB:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEipB.AllocationId
+      SubnetId: !Ref PublicSubnetB
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-NatGatewayB
+
+  NatGatewayC:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEipC.AllocationId
+      SubnetId: !Ref PublicSubnetC
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-NatGatewayC
+
+
+  ### Route Table ###
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-public-rt
+      VpcId: !Ref VPC
+
+  PrivateRouteTableDefault:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-private-rt-default
+      VpcId: !Ref VPC
+
+  PrivateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-private-rt-a
+      VpcId: !Ref VPC
+
+  PrivateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-private-rt-b
+      VpcId: !Ref VPC
+
+  PrivateRouteTableC:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-private-rt-c
+      VpcId: !Ref VPC
+
+  NatRouteTableA:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-nat-rt-a
+      VpcId: !Ref VPC
+
+  NatRouteTableB:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-nat-rt-b
+      VpcId: !Ref VPC
+
+  NatRouteTableC:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-nat-rt-c
+      VpcId: !Ref VPC
+
+  ### add route rule to Route Table & association Route Table to Subnets ###
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetA
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetB
+
+  PublicSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetC
+
+
+  PrivateRouteA:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayA
+      RouteTableId: !Ref PrivateRouteTableA
+
+  PrivateRouteB:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayB
+      RouteTableId: !Ref PrivateRouteTableB
+
+  PrivateRouteC:
+    Condition: IsCreateNATGateway
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayC
+      RouteTableId: !Ref PrivateRouteTableC
+
+  PrivateSubnetARouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !If [ IsCreateNATGateway, !Ref PrivateRouteTableA, !Ref PrivateRouteTableDefault ]
+      SubnetId: !Ref PrivateSubnetA
+
+  PrivateSubnetBRouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !If [ IsCreateNATGateway, !Ref PrivateRouteTableB, !Ref PrivateRouteTableDefault ]
+      SubnetId: !Ref PrivateSubnetB
+
+  PrivateSubnetCRouteTableAssociationC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !If [ IsCreateNATGateway, !Ref PrivateRouteTableC, !Ref PrivateRouteTableDefault ]
+      SubnetId: !Ref PrivateSubnetC
+
+  ##### vpc endpoint for S3 #####
+  S3VPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal: '*'
+          Action:
+          - 's3:*'
+          Resource: '*'
+      RouteTableIds:
+      - !Ref PrivateRouteTableA
+      - !Ref PrivateRouteTableB
+      - !Ref PrivateRouteTableC
+      - !Ref PrivateRouteTableDefault
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcId: !Ref VPC
+
+  DynamicDBVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal: '*'
+          Action:
+          # - '*'
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+          - dynamodb:BatchGetItem
+          - dynamodb:DeleteGetItem
+          - dynamodb:Query
+          # Resource: '*'
+          Resource:
+          - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*
+      RouteTableIds:
+      - !Ref PrivateRouteTableA
+      - !Ref PrivateRouteTableB
+      - !Ref PrivateRouteTableC
+      - !Ref PrivateRouteTableDefault
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.dynamodb
+      VpcId: !Ref VPC
+
+
+  ##### spot ec2 #####
+  EC2Sg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      # GroupName: !Sub ${EnvType}-EC2Sg
+      GroupDescription: allow traffice to ec2
+      SecurityGroupIngress:
+        - IpProtocol: 'TCP'
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvType}-sg
+      VpcId: !Ref VPC
+
+  ### Ec2 by spot ###
+  SpotAsg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: spot-asg
+      Cooldown: '300'
+      HealthCheckGracePeriod: 300
+      # ALB or EC2 , start with EC2, be sure to use ELB
+      HealthCheckType: EC2
+      LaunchConfigurationName: !Ref SpotEc2LaunchConfiguration
+      TargetGroupARNs:
+        - !Ref ApplicationLoadBalancerTargetGroup
+      MaxSize: !Sub ${MaxSize}
+      MinSize: !Sub ${MinSize}
+      DesiredCapacity: !Sub ${DesiredCapacity}
+      MetricsCollection:
+      - Granularity: 1Minute
+      NotificationConfigurations:
+        - NotificationTypes:
+          - autoscaling:EC2_INSTANCE_LAUNCH
+          - autoscaling:EC2_INSTANCE_TERMINATE
+          - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+          - autoscaling:EC2_INSTANCE_TERMINATE_ERROR
+          TopicARN: !Ref sns2SlackTopic
+        - NotificationTypes:
+          - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+          TopicARN: !Ref changeEc2TypeSnsTopic
+      # http://docs.aws.amazon.com/autoscaling/latest/userguide/as-instance-termination.html
+      TerminationPolicies:
+        - OldestInstance
+        - Default
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+        - !Ref PrivateSubnetC
+      Tags:
+        - PropagateAtLaunch: true
+          Key: Name
+          Value: !Sub Spot-${AWS::StackName}-${EnvType}-Asg
+
+  SpotEc2LaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: false
+      IamInstanceProfile: !Ref Ec2ServerRoleInstanceProfile
+      ImageId: ami-0c5204531f799e0c6
+      InstanceMonitoring: true
+      InstanceType: t3.micro
+      SecurityGroups:
+        - !Ref EC2Sg
+      SpotPrice: !Sub ${SpotPrice}
+      UserData:
+        'Fn::Base64': |
+          #!/bin/bash
+          yum update -y
+          amazon-linux-extras install -y nginx1.12
+          systemctl start nginx.service
+          systemctl enable nginx.service
+          echo "<html><body><h1>spot</h1></body</html>" > /usr/share/nginx/html/index.html
+      # UserData:
+      #   'Fn::Base64': !Sub
+      #   - |
+      #     #!/bin/bash
+      #     ### create new dhcp-options
+      #     sudo tee /opt/vpc-dhcp-options.sh <<EOF
+      #     #!/bin/bash
+      #     # export HTTPS_PROXY=http://\$(dig tproxy.104dc-dev.com @localhost +short |head -n 1):3128
+      #     export HTTPS_PROXY=http://\$(dig ${tproxy} @localhost +short |head -n 1):3128
+      #     echo \$HTTPS_PROXY
+      #     aws ec2 create-dhcp-options --dhcp-configurations Key=ntp-servers,Values=169.254.169.123 Key=domain-name,Values=hunter.aws.internal Key=domain-name-servers,Values=$(ifconfig | grep 'inet addr'|head -n 1 | cut -d: -f2 | awk '{print $1}') --region ap-northeast-1 > /tmp/dhcp.json
+      #     export DHCP_OPTIONS=\$(cat /tmp/dhcp.json |grep DhcpOptionsId|cut -d: -f2|cut -d\"  -f2)
+      #     export VPC_ID=$(curl --silent http://169.254.169.254/latest/meta-data/network/interfaces/macs/$(curl --silent http://169.254.169.254/latest/meta-data/network/interfaces/macs)/vpc-id)
+      #     ### associate new dhcp-options to vpc
+      #     aws ec2 associate-dhcp-options --dhcp-options-id \$DHCP_OPTIONS --vpc-id \$VPC_ID --region ap-northeast-1
+      #     ### remove unused dhcp-options
+      #     diff <(aws ec2 describe-vpcs --region ap-northeast-1|grep DhcpOptionsId|cut -d\" -f4|sort) <(aws ec2 describe-dhcp-options --region ap-northeast-1 |grep DhcpOptionsId|cut -d: -f2|cut -d\" -f2|sort)|awk '{print \$2}'| xargs -L 1 aws ec2 delete-dhcp-options --region ap-northeast-1 --dhcp-options-id
+      #     unset HTTPS_PROXY
+      #     EOF
+      #     echo 'cat /opt/vpc-dhcp-options.sh'
+      #     cat /opt/vpc-dhcp-options.sh
+      #     chmod +x /opt/vpc-dhcp-options.sh
+      #     sudo sed -i "/^exit 0/i bash /opt/vpc-dhcp-options.sh" /etc/rc.local
+      #     sleep 3
+      #     sudo bash /opt/vpc-dhcp-options.sh
+      #   - {
+      #       tproxy : !FindInMap [ 'AWS', Ref: EnvType, 'tProxy' ]
+      #     }
+
+
+  ### Ec2 by on daemon ###
+  OnDemandAsg:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      # AutoScalingGroupName: spot-asg
+      Cooldown: '300'
+      HealthCheckGracePeriod: 300
+      # ALB or EC2 , start with EC2, be sure to use ELB
+      HealthCheckType: EC2
+      LaunchConfigurationName: !Ref OnDemandEc2LaunchConfiguration
+      TargetGroupARNs:
+        - !Ref ApplicationLoadBalancerTargetGroup
+      MaxSize: '0'
+      MinSize: '0'
+      DesiredCapacity: '0'
+      MetricsCollection:
+      - Granularity: 1Minute
+      NotificationConfigurations:
+        - NotificationTypes:
+          - autoscaling:EC2_INSTANCE_LAUNCH
+          - autoscaling:EC2_INSTANCE_TERMINATE
+          - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+          - autoscaling:EC2_INSTANCE_TERMINATE_ERROR
+          TopicARN: !Ref sns2SlackTopic
+      # http://docs.aws.amazon.com/autoscaling/latest/userguide/as-instance-termination.html
+      TerminationPolicies:
+        - OldestInstance
+        - Default
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+        - !Ref PrivateSubnetC
+      Tags:
+        - PropagateAtLaunch: true
+          Key: Name
+          Value: !Sub Spot-${AWS::StackName}-${EnvType}-Asg
+
+  OnDemandEc2LaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: false
+      IamInstanceProfile: !Ref Ec2ServerRoleInstanceProfile
+      ImageId: ami-0c5204531f799e0c6
+      InstanceMonitoring: true
+      InstanceType: t3.micro
+      SecurityGroups:
+        - !Ref EC2Sg
+      UserData:
+        'Fn::Base64': |
+          #!/bin/bash
+          yum update -y
+          amazon-linux-extras install -y nginx1.12
+          systemctl start nginx.service
+          systemctl enable nginx.service
+          echo "<html><body><h1>on demand</h1></body</html>" > /usr/share/nginx/html/index.html
+
+
+  Ec2ServerRoleInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${AWS::StackName}-Ec2-server
+      Path: '/'
+      Roles:
+        -
+          Ref: Ec2ServerRole
+
+  Ec2ServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      # RoleName: !Sub '${AWS::StackName}-Ec2-server'
+      Description: !Sub CreatedBy cfn-${AWS::StackName} ,Ec2-server-role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+      Policies:
+        - PolicyName: s3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+            - Effect: Allow
+              Action:
+                - 's3:Get*'
+                - 's3:List*'
+              Resource: 'arn:aws:s3:::*'
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvType}-Ec2ServerRole
+
+
+
+  ##### security group #####
+  # public
+  ELBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ELB SecurityGroup
+      SecurityGroupIngress:
+      - IpProtocol: 'tcp'
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: 'tcp'
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-public-web-elb
+      VpcId: !Ref VPC
+
+  ELB2EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ELB to EC2 traffice Security group
+      SecurityGroupIngress:
+      - IpProtocol: 'tcp'
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId:
+          Ref: ELBSecurityGroup
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-ELB2EC2SecurityGroup
+      VpcId: !Ref VPC
+
+
+  ##### sg for ELB traffice #####
+  ##### ELB #####
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+        - !Ref PublicSubnetC
+      SecurityGroups:
+      - !Ref ELBSecurityGroup
+      Scheme: internet-facing
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvType}-alb
+
+  ApplicationLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn: !Ref ApplicationLoadBalancerTargetGroup
+
+
+  ApplicationLoadBalancerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPath: '/'
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: 200-299
+      Port: 80
+      Protocol: HTTP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '15'
+      VpcId: !Ref VPC
+      # Tags:
+      # - Key: Name
+      #   Value: !Sub ${EnvType}-ALB-TG'
+
+
+
+  ##### change ec2 from spot instance to on daemon #####
+  changeEc2TypeSnsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: change ec2 type sns
+      Subscription:
+      - Endpoint: !GetAtt changeEc2TypeLambdaFunction.Arn
+        Protocol: lambda
+
+  changeEc2TypeSnsLambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt changeEc2TypeLambdaFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref changeEc2TypeSnsTopic
+
+  ec2ChnageLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: !Sub 'CreatedBy cfn-${AWS::StackName} ,lambda change ec2 pricing type execuation role'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+      - PolicyName: asg
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Resource: '*'
+            Action:
+            - autoscaling:UpdateAutoScalingGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvType}-change-ec2-role
+
+  changeEc2TypeLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: 'change server type'
+      Environment:
+        Variables:
+          # SPOT_EC2: !Ref SpotAsg // variables same as SpotDnsAsg.AutoScalingGroupName, use !Ref get the Cycle Dependency
+          SPOT_EC2: 'spot-asg'
+          ON_DEMAND_EC2: !Ref OnDemandAsg
+      Handler: "index.handler"
+      Role: !GetAtt ec2ChnageLambdaExecutionRole.Arn
+      Runtime: 'python3.7'
+      Timeout: 5
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvType}-change-ec2-type
+      Code:
+        ZipFile: >-
+          import boto3
+
+          import os
+
+          spotEc2 = os.environ['SPOT_EC2']
+
+          onDemandEc2 = os.environ['ON_DEMAND_EC2']
+
+          def handler(event, context):
+            client = boto3.client('autoscaling')
+            client.update_auto_scaling_group(
+              AutoScalingGroupName=spotEc2,
+              MinSize=0,
+              MaxSize=0,
+              DesiredCapacity=0
+            )
+            client.update_auto_scaling_group(
+              AutoScalingGroupName=onDemandEc2,
+              MinSize=1,
+              MaxSize=1,
+              DesiredCapacity=1
+            )
+            return 'Update Asg Success!'
+
+
+  # cloud watch event for spot dns iterrupter
+  SpotEc2EventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: 'spot dns iterruption warning'
+      EventPattern:
+        source:
+          - 'aws.ec2'
+        detail-type:
+          - 'EC2 Spot Instance Interruption Warning'
+      State: ENABLED
+      Targets:
+        - Arn: !Ref sns2SlackTopic
+          Id: !GetAtt  sns2SlackTopic.TopicName
+        - Arn: !Ref changeEc2TypeSnsTopic
+          Id: !GetAtt  changeEc2TypeSnsTopic.TopicName
+
+  EventLambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt changeEc2TypeLambdaFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SpotEc2EventRule.Arn
+
+
+
+  ##### default sns #####
+  sns2SlackTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: sns to slack topic
+      Subscription:
+      - Endpoint: !GetAtt sns2slackFunction.Arn
+        Protocol: 'lambda'
+
+  snsLambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt sns2slackFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref sns2SlackTopic
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: !Sub CreatedBy cfn-${AWS::StackName} , Lambda execution role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvType}-LambdaExecutionRole
+
+  sns2slackFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: sns to slack
+      Environment:
+        Variables:
+          WEB_HOOK_PATH: '/services/TAY46RUG7/BRUB0528G/Voon4vJ3C5kjAtgbj0oNkPil'
+          CHANNEL: 'test'
+      Runtime: nodejs10.x
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 5
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvType}-sns2slackFunction
+      Code:
+        ZipFile: >-
+          'use strict';
+
+          var https = require('https');
+
+          let SLACK_WEB_HOOK_URL = process.env.WEB_HOOK_PATH;
+          let channelPrefix = '#' + process.env.CHANNEL;
+
+          exports.handler = function(event, context) {
+            let text = "";
+            let preText = "";
+            let message = "";
+            let date = null;
+            if (typeof event === "undefined" || typeof event.Records === "undefined" || typeof event.Records[0].Sns === "undefined"){
+              message = JSON.stringify(context);
+            } else {
+              preText = event.Records[0].Sns.Subject;
+              message = event.Records[0].Sns.Message;
+              if (event.Records[0].Sns.Timestamp)
+                date = new Date(event.Records[0].Sns.Timestamp).getTime()/1000;
+            }
+
+            let color = getColor(message);
+            let channel = channelPrefix;
+            /*
+            switch (color){
+              case 'danger':
+                channel += 'error';
+              break;
+              case 'warning':
+                channel += 'warn';
+              break;
+              default:
+                channel += 'info';
+            }
+            */
+            try{
+              message = JSON.stringify(JSON.parse(message),null,2);
+            }catch(error){}
+
+            let postData = {
+              "username": "AWS SNS",
+              "channel": channel,
+              "text": text
+            };
+            postData.attachments = [
+              {
+                "color": color,
+                "pretext": preText,
+                "text": message,
+                "ts": date
+              }
+            ];
+
+            let options = {
+              method: 'POST',
+              hostname: 'hooks.slack.com',
+              port: 443,
+              path: SLACK_WEB_HOOK_URL
+            };
+
+            let req = https.request(options, (res) => {
+              res.setEncoding('utf-8');
+              res.on('data', (data) => {
+                console.log('http-request-body=',data);
+                context.succeed();
+              });
+            });
+            req.on('error', (e) => {
+              console.log('problem with request:' , e.message);
+            });
+            req.write(JSON.stringify(postData));
+            req.end();
+
+          };
+
+
+          function getColor(message){
+            let color = "good";
+            message = JSON.stringify(message).toLowerCase();
+
+            let dangerMessages = [
+              "exception" ,"error" ,"aborted" ,"failed" ,"not authorized" ,"unsuccessful" ,"do not have permission"
+            ];
+            let warningMessages = [
+              "warning" , "pending" ,"removed" ,"rollback" ,"delete" ,"adding instance"
+            ];
+
+            for(let item in dangerMessages) {
+              if (message.indexOf(dangerMessages[item])>=0){
+                color = "danger";
+                break;
+              }
+            }
+            if (color === "good") {
+              for(let item in warningMessages) {
+                if (message.indexOf(warningMessages[item])>=0){
+                  color = "warning";
+                  break;
+                }
+              }
+            }
+            return color;
+          }
