@@ -10,9 +10,9 @@ Parameters:
     ConstraintDescription: 'must specify prod, stag or dev.'
     Default: 'dev'
     AllowedValues:
-      - 'prod'
-      - 'stag'
-      - 'dev'
+    - 'prod'
+    - 'stag'
+    - 'dev'
 
 # Mappings:
 #   S3:
@@ -30,78 +30,73 @@ Resources:
       UserName: "travis-ci"
       Path: '/'
       Policies:
-        -
-          PolicyName: !Sub 'ci-s3'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              -
-                Effect: 'Allow'
-                Action:
-                  - 's3:AbortMultipartUpload'
-                  - 's3:DeleteObject'
-                  - 's3:GetObject'
-                  - 's3:GetObjectAcl'
-                  - 's3:PutObject'
-                  - 's3:PutObjectAcl'
-                Resource:
-                  - 'arn:aws:s3:::noah-deploy/*'
-                  # - Fn::Join:
-                  #   - ''
-                  #   -
-                  #     - 'arn:aws:s3:::'
-                  #     - !FindInMap [ 'S3', Ref: EnvType, 'BUCKET' ]
-                  #     - '/lambda-code/*'
-        -
-          PolicyName: !Sub 'ci-codedeploy'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              -
-                Effect: 'Allow'
-                Action:
-                  - 'codedeploy:CreateDeployment'
-                  - 'codedeploy:GetApplicationRevision'
-                  - 'codedeploy:GetDeployment'
-                  - 'codedeploy:GetDeploymentConfig'
-                  - 'codedeploy:RegisterApplicationRevision'
-                Resource:
-                  - '*'
-        -
-          PolicyName: !Sub 'ci-deploy-lambda'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Sid: 'ListExistingRolesAndPolicies'
-                Effect: 'Allow'
-                Action:
-                  - 'iam:ListRolePolicies'
-                  - 'iam:ListRoles'
-                Resource: "*"
-              - Sid: 'CreateAndListFunctions'
-                Effect: 'Allow'
-                Action:
-                  - 'lambda:CreateFunction'
-                  - 'lambda:ListFunctions'
-                  - 'lambda:TagResource'
-                Resource: "*"
-              - Sid: 'DeployCode'
-                Effect: 'Allow'
-                Action:
-                  - 'lambda:GetFunction'
-                  - 'lambda:UpdateFunctionCode'
-                  - 'lambda:UpdateFunctionConfiguration'
-                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*'
-              - Sid: 'SetRole'
-                Effect: 'Allow'
-                Action:
-                  - 'iam:PassRole'
-                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/*'
-              - Sid: 'SetVPCInfo'
-                Effect: 'Allow'
-                Action:
-                  - 'ec2:DescribeSubnets'
-                  - 'ec2:DescribeVpcs'
-                  - 'ec2:DescribeSecurityGroups'
-                  - 'ec2:DescribeVpcs'
-                Resource: '*'
+      - PolicyName: !Sub 'ci-s3'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: 'Allow'
+            Action:
+            - 's3:AbortMultipartUpload'
+            - 's3:DeleteObject'
+            - 's3:GetObject'
+            - 's3:GetObjectAcl'
+            - 's3:PutObject'
+            - 's3:PutObjectAcl'
+            Resource:
+            - 'arn:aws:s3:::noah-deploy/*'
+            # - Fn::Join:
+            #   - ''
+            #   -
+            #     - 'arn:aws:s3:::'
+            #     - !FindInMap [ 'S3', Ref: EnvType, 'BUCKET' ]
+            #     - '/lambda-code/*'
+      - PolicyName: !Sub 'ci-codedeploy'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: 'Allow'
+            Action:
+            - 'codedeploy:CreateDeployment'
+            - 'codedeploy:GetApplicationRevision'
+            - 'codedeploy:GetDeployment'
+            - 'codedeploy:GetDeploymentConfig'
+            - 'codedeploy:RegisterApplicationRevision'
+            Resource:
+            - '*'
+      - PolicyName: !Sub 'ci-deploy-lambda'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Sid: 'ListExistingRolesAndPolicies'
+            Effect: 'Allow'
+            Action:
+            - 'iam:ListRolePolicies'
+            - 'iam:ListRoles'
+            Resource: "*"
+          - Sid: 'CreateAndListFunctions'
+            Effect: 'Allow'
+            Action:
+            - 'lambda:CreateFunction'
+            - 'lambda:ListFunctions'
+            - 'lambda:TagResource'
+            Resource: "*"
+          - Sid: 'DeployCode'
+            Effect: 'Allow'
+            Action:
+            - 'lambda:GetFunction'
+            - 'lambda:UpdateFunctionCode'
+            - 'lambda:UpdateFunctionConfiguration'
+            Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*'
+          - Sid: 'SetRole'
+            Effect: 'Allow'
+            Action:
+            - 'iam:PassRole'
+            Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/*'
+          - Sid: 'SetVPCInfo'
+            Effect: 'Allow'
+            Action:
+            - 'ec2:DescribeSubnets'
+            - 'ec2:DescribeVpcs'
+            - 'ec2:DescribeSecurityGroups'
+            - 'ec2:DescribeVpcs'
+            Resource: '*'
