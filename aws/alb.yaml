@@ -1,7 +1,6 @@
-
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-    Application Load Balancer,Security Group for Http/Https protocol
+  Application Load Balancer,Security Group for Http/Https protocol
 
 Parameters:
   ParentStack:
@@ -14,9 +13,9 @@ Parameters:
     ConstraintDescription: 'must specify prod, stag or dev.'
     Default: 'dev'
     AllowedValues:
-      - 'prod'
-      - 'stag'
-      - 'dev'
+    - 'prod'
+    - 'stag'
+    - 'dev'
 
   PrivateSubnet1CreateSecurityGroup:
     Type: String
@@ -65,20 +64,17 @@ Resources:
     Properties:
       GroupDescription: 'ELBSecurityGroup'
       SecurityGroupIngress:
-        -
-          IpProtocol: 'tcp'
-          FromPort: '80'
-          ToPort: '80'
-          CidrIp: '0.0.0.0/0'
-        -
-          IpProtocol: 'tcp'
-          FromPort: '443'
-          ToPort: '443'
-          CidrIp: '0.0.0.0/0'
+      - IpProtocol: 'tcp'
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: '0.0.0.0/0'
+      - IpProtocol: 'tcp'
+        FromPort: '443'
+        ToPort: '443'
+        CidrIp: '0.0.0.0/0'
       Tags:
-        -
-          Key: Name
-          Value: !Sub '${EnvType}-public-web-elb'
+      - Key: Name
+        Value: !Sub '${EnvType}-public-web-elb'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
 
@@ -89,25 +85,20 @@ Resources:
       GroupDescription: 'PrivateSecurityGroup1'
       SecurityGroupIngress:
         !If
-        - PrivateSubnet1forECSCond
-        -
-          -
-            IpProtocol: 'tcp'
-            FromPort: '0'
-            ToPort: '65535'
-            SourceSecurityGroupId:
-              Ref: ELBSecurityGroup
-        -
-          -
-            IpProtocol: 'tcp'
-            FromPort: '80'
-            ToPort: '80'
-            SourceSecurityGroupId:
-              Ref: ELBSecurityGroup
+      - PrivateSubnet1forECSCond
+      - - IpProtocol: 'tcp'
+          FromPort: '0'
+          ToPort: '65535'
+          SourceSecurityGroupId:
+            Ref: ELBSecurityGroup
+      - - IpProtocol: 'tcp'
+          FromPort: '80'
+          ToPort: '80'
+          SourceSecurityGroupId:
+            Ref: ELBSecurityGroup
       Tags:
-        -
-          Key: Name
-          Value: !Sub '${EnvType}-private-1'
+      - Key: Name
+        Value: !Sub '${EnvType}-private-1'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
 
@@ -118,25 +109,20 @@ Resources:
       GroupDescription: 'PrivateSecurityGroup2'
       SecurityGroupIngress:
         !If
-        - PrivateSubnet2forECSCond
-        -
-          -
-            IpProtocol: 'tcp'
-            FromPort: '0'
-            ToPort: '65535'
-            SourceSecurityGroupId:
-              Ref: ELBSecurityGroup
-        -
-          -
-            IpProtocol: 'tcp'
-            FromPort: '80'
-            ToPort: '80'
-            SourceSecurityGroupId:
-              Ref: ELBSecurityGroup
+      - PrivateSubnet2forECSCond
+      - - IpProtocol: 'tcp'
+          FromPort: '0'
+          ToPort: '65535'
+          SourceSecurityGroupId:
+            Ref: ELBSecurityGroup
+      - - IpProtocol: 'tcp'
+          FromPort: '80'
+          ToPort: '80'
+          SourceSecurityGroupId:
+            Ref: ELBSecurityGroup
       Tags:
-        -
-          Key: Name
-          Value: !Sub '${EnvType}-private-2'
+      - Key: Name
+        Value: !Sub '${EnvType}-private-2'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
 
@@ -146,18 +132,18 @@ Resources:
     Properties:
       Name:
         !If
-        - SpecialAlbNameCond
-        - !Ref SpecialAlbName
-        - !Sub '${AWS::StackName}-${EnvType}-ALB'
+      - SpecialAlbNameCond
+      - !Ref SpecialAlbName
+      - !Sub '${AWS::StackName}-${EnvType}-ALB'
       Subnets:
-        - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
-        - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetB'
+      - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
+      - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetB'
       SecurityGroups:
-        - !Ref ELBSecurityGroup
+      - !Ref ELBSecurityGroup
       Scheme: 'internet-facing'
       Tags:
-        - Key: Name
-          Value: !Sub '${ParentStack}-${EnvType}-ALB'
+      - Key: Name
+        Value: !Sub '${ParentStack}-${EnvType}-ALB'
 
   ApplicationLoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -166,8 +152,8 @@ Resources:
       Port: 80
       Protocol: HTTP
       DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref ApplicationLoadBalancerTargetGroup
+      - Type: forward
+        TargetGroupArn: !Ref ApplicationLoadBalancerTargetGroup
 
 
   ApplicationLoadBalancerTargetGroup:
@@ -184,13 +170,13 @@ Resources:
       Port: 80
       Protocol: HTTP
       TargetGroupAttributes:
-        - Key: deregistration_delay.timeout_seconds
-          Value: '15'
+      - Key: deregistration_delay.timeout_seconds
+        Value: '15'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
       Tags:
-        - Key: Name
-          Value: !Sub '${ParentStack}-${EnvType}-ALB-TG'
+      - Key: Name
+        Value: !Sub '${ParentStack}-${EnvType}-ALB-TG'
 
 
 
