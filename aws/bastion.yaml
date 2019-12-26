@@ -1,4 +1,3 @@
-
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'bastion server , bastion security group'
 
@@ -14,9 +13,9 @@ Parameters:
     ConstraintDescription: 'must specify prod, stag or dev.'
     Default: 'dev'
     AllowedValues:
-      - 'prod'
-      - 'stag'
-      - 'dev'
+    - 'prod'
+    - 'stag'
+    - 'dev'
 
   EC2InstanceImageId:
     Type: AWS::EC2::Image::Id
@@ -28,9 +27,9 @@ Parameters:
     Description: 'Specifies the Bastion server EC2 Type'
     Default: 't2.micro'
     AllowedValues:
-      - 't2.nano'
-      - 't2.micro'
-      - 't2.small'
+    - 't2.nano'
+    - 't2.micro'
+    - 't2.small'
 
   EC2BastionKeyPair:
     Type: String
@@ -50,13 +49,13 @@ Resources:
     Properties:
       GroupDescription: 'BastionSSHSecurityGroup'
       SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !Sub '${BastionIncomingIp}'
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: !Sub '${BastionIncomingIp}'
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-bastion-ssh'
+      - Key: Name
+        Value: !Sub '${EnvType}-bastion-ssh'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
 
@@ -66,19 +65,19 @@ Resources:
     Properties:
       GroupDescription: 'BastionPrivateSSHSecurityGroup'
       SecurityGroupIngress:
-        - IpProtocol: 'tcp'
-          FromPort: '22'
-          ToPort: '22'
-          SourceSecurityGroupId:
-            Ref: BastionSSHSecurityGroup
-        - IpProtocol: 'icmp'
-          FromPort: -1
-          ToPort: -1
-          SourceSecurityGroupId:
-            Ref: BastionSSHSecurityGroup
+      - IpProtocol: 'tcp'
+        FromPort: '22'
+        ToPort: '22'
+        SourceSecurityGroupId:
+          Ref: BastionSSHSecurityGroup
+      - IpProtocol: 'icmp'
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId:
+          Ref: BastionSSHSecurityGroup
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-bastion-private-ssh'
+      - Key: Name
+        Value: !Sub '${EnvType}-bastion-private-ssh'
       VpcId:
         'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-VPC'
 
@@ -95,37 +94,37 @@ Resources:
       KeyName: !Sub '${EC2BastionKeyPair}'
       Monitoring: 'true'
       NetworkInterfaces:
-        - AssociatePublicIpAddress: "true"
-          DeviceIndex: "0"
-          GroupSet:
-            - Ref: BastionSSHSecurityGroup
-          SubnetId:
-            'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
-          DeleteOnTermination: 'true'
-#      SecurityGroupIds:
-#        - !Ref BastionSSHSecurityGroup
-#      SubnetId:
-#        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
+      - AssociatePublicIpAddress: "true"
+        DeviceIndex: "0"
+        GroupSet:
+        - Ref: BastionSSHSecurityGroup
+        SubnetId:
+          'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
+        DeleteOnTermination: 'true'
+      #      SecurityGroupIds:
+      #        - !Ref BastionSSHSecurityGroup
+      #      SubnetId:
+      #        'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PublicSubnetA'
       UserData:
         'Fn::Base64': !Sub |
-           #!/bin/bash -x
-           sudo yum update -y
+          #!/bin/bash -x
+          sudo yum update -y
       Tags:
-        - Key: Name
-          Value: !Sub '${EnvType}-bastion-server'
+      - Key: Name
+        Value: !Sub '${EnvType}-bastion-server'
 
 
 
 Outputs:
-    BastionEC2PublicIp:
-        Value: !GetAtt BastionEC2.PublicIp
-        Export:
-          Name: !Sub '${ParentStack}-${EnvType}-Bastion-PublicIp'
-    BastionEC2PrivateIp:
-        Value: !GetAtt BastionEC2.PrivateIp
-        Export:
-          Name: !Sub '${ParentStack}-${EnvType}-Bastion-PrivateIp'
-    BastionEC2IncomingIp:
-        Value: !Sub '${BastionIncomingIp}'
-        Export:
-          Name: !Sub '${ParentStack}-${EnvType}-Bastion-IncomingIp'
+  BastionEC2PublicIp:
+    Value: !GetAtt BastionEC2.PublicIp
+    Export:
+      Name: !Sub '${ParentStack}-${EnvType}-Bastion-PublicIp'
+  BastionEC2PrivateIp:
+    Value: !GetAtt BastionEC2.PrivateIp
+    Export:
+      Name: !Sub '${ParentStack}-${EnvType}-Bastion-PrivateIp'
+  BastionEC2IncomingIp:
+    Value: !Sub '${BastionIncomingIp}'
+    Export:
+      Name: !Sub '${ParentStack}-${EnvType}-Bastion-IncomingIp'
