@@ -1,4 +1,3 @@
-
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'ScalingPolicy of AutoScalingGroup'
 
@@ -15,9 +14,9 @@ Parameters:
     ConstraintDescription: 'must specify prod, stag or dev.'
     Default: 'dev'
     AllowedValues:
-      - 'prod'
-      - 'stag'
-      - 'dev'
+    - 'prod'
+    - 'stag'
+    - 'dev'
 
   AsgStack:
     Type: String
@@ -33,17 +32,17 @@ Parameters:
     Description: 'An Auto Scaling policy type'
     Default: 'SimpleScaling'
     AllowedValues:
-      - 'None'
-      - 'SimpleScaling'
-      - 'StepScaling'
+    - 'None'
+    - 'SimpleScaling'
+    - 'StepScaling'
 
   ScheduledAction:
     Type: String
     Description: 'A scheduled scaling action'
     Default: 'None'
     AllowedValues:
-      - 'None'
-      - 'Yes'
+    - 'None'
+    - 'Yes'
 
 Conditions:
   HasScalingPolicyCond: !Not [ !Equals [ !Ref ScalingPolicy, 'None' ] ]
@@ -89,13 +88,11 @@ Resources:
       EstimatedInstanceWarmup: !Sub '${ScalingCooldown}'
       # StepAdjustments must reference the Alarm Threshold
       StepAdjustments:
-        -
-          MetricIntervalLowerBound: 0
-          MetricIntervalUpperBound: 20
-          ScalingAdjustment: 1
-        -
-          MetricIntervalLowerBound: 20
-          ScalingAdjustment: 2
+      - MetricIntervalLowerBound: 0
+        MetricIntervalUpperBound: 20
+        ScalingAdjustment: 1
+      - MetricIntervalLowerBound: 20
+        ScalingAdjustment: 2
 
   StepScalingDown:
     Condition: StepScalingCond
@@ -109,9 +106,8 @@ Resources:
       EstimatedInstanceWarmup: !Sub '${ScalingCooldown}'
       # StepAdjustments must reference the Alarm Threshold
       StepAdjustments:
-        -
-          MetricIntervalLowerBound: 0
-          ScalingAdjustment: -1
+      - MetricIntervalLowerBound: 0
+        ScalingAdjustment: -1
 
 
   ##### CPU Alarm #####
@@ -126,11 +122,9 @@ Resources:
       Period: '180'
       AlarmActions:
         !If
-        - SimpleScalingCond
-        -
-          - Ref: SimpleScalingUp
-        -
-          - Ref: StepScalingUp
+      - SimpleScalingCond
+      - - Ref: SimpleScalingUp
+      - - Ref: StepScalingUp
       Namespace: 'AWS/EC2'
       Dimensions:
       - Name: 'AutoScalingGroupName'
@@ -150,12 +144,10 @@ Resources:
       Period: '180'
       AlarmActions:
         !If
-        - SimpleScalingCond
-        -
-          - Ref: SimpleScalingDown
-        -
-          - Ref: StepScalingDown
-        # - Ref: SimpleScalingDown
+      - SimpleScalingCond
+      - - Ref: SimpleScalingDown
+      - - Ref: StepScalingDown
+      # - Ref: SimpleScalingDown
       Namespace: 'AWS/EC2'
       Dimensions:
       - Name: 'AutoScalingGroupName'
