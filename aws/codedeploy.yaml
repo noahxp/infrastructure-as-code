@@ -15,9 +15,9 @@ Parameters:
     ConstraintDescription: 'must specify prod, stag or dev.'
     Default: 'dev'
     AllowedValues:
-      - 'prod'
-      - 'stag'
-      - 'dev'
+    - 'prod'
+    - 'stag'
+    - 'dev'
 
   AsgStack:
     Type: String
@@ -63,28 +63,26 @@ Resources:
       #   AlarmConfiguration
       ApplicationName: !Ref CodeDeployApplication
       AutoScalingGroups:
-        -
-          !If
-          - AsgStackCond
-          - 'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
-          - !Ref "AWS::NoValue"
-        -
-          !If
-          - AsgStack2Cond
-          - 'Fn::ImportValue': !Sub '${AsgStack2}-${EnvType}-ASG'
-          - !Ref "AWS::NoValue"
+      - !If
+        - AsgStackCond
+        - 'Fn::ImportValue': !Sub '${AsgStack}-${EnvType}-ASG'
+        - !Ref "AWS::NoValue"
+      - !If
+        - AsgStack2Cond
+        - 'Fn::ImportValue': !Sub '${AsgStack2}-${EnvType}-ASG'
+        - !Ref "AWS::NoValue"
       LoadBalancerInfo:
-#        for CLB
-#        ElbInfoList:
-#          - Name: !GetAtt NetworkLoadBalancer.LoadBalancerName
-#        for ALB, NLB
-#        TargetGroupInfoList:
-#          - Name: !GetAtt NLBTargetGroup.TargetGroupName
+        #        for CLB
+        #        ElbInfoList:
+        #          - Name: !GetAtt NetworkLoadBalancer.LoadBalancerName
+        #        for ALB, NLB
+        #        TargetGroupInfoList:
+        #          - Name: !GetAtt NLBTargetGroup.TargetGroupName
         TargetGroupInfoList:
-          - !If
-            - ALBCond
-            - Name: 'Fn::ImportValue': !Sub '${AsgStack2}-${EnvType}-ALB-TG'
-            - !Ref "AWS::NoValue"
+        - !If
+          - ALBCond
+          - Name: 'Fn::ImportValue': !Sub '${AsgStack2}-${EnvType}-ALB-TG'
+          - !Ref "AWS::NoValue"
       DeploymentStyle:
         DeploymentOption: WITH_TRAFFIC_CONTROL
       DeploymentConfigName: "CodeDeployDefault.OneAtATime"
@@ -92,23 +90,23 @@ Resources:
       # reference : http://docs.aws.amazon.com/codedeploy/latest/APIReference/API_TriggerConfig.html
       TriggerConfigurations:
         !If
-        - SNSStackCond
-        - - TriggerEvents:
-              # - DeploymentStart
-              - DeploymentSuccess
-              - DeploymentFailure
-              - DeploymentStop
-              - DeploymentRollback
-              # - DeploymentReady
-              # - InstanceStart
-              - InstanceSuccess
-              - InstanceFailure
-              # - InstanceReady'
-            TriggerName: !Sub '${AWS::StackName}-${EnvType}-trigger'
-            TriggerTargetArn:
-              'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-sns2slack'
+      - SNSStackCond
+      - - TriggerEvents:
+          # - DeploymentStart
+          - DeploymentSuccess
+          - DeploymentFailure
+          - DeploymentStop
+          - DeploymentRollback
+          # - DeploymentReady
+          # - InstanceStart
+          - InstanceSuccess
+          - InstanceFailure
+          # - InstanceReady'
+          TriggerName: !Sub '${AWS::StackName}-${EnvType}-trigger'
+          TriggerTargetArn:
+            'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-sns2slack'
 
-        - !Ref 'AWS::NoValue'
+      - !Ref 'AWS::NoValue'
 
   CodeDeployServiceRole:
     Type: 'AWS::IAM::Role'
@@ -116,16 +114,16 @@ Resources:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: ''
-            Effect: 'Allow'
-            Action: 'sts:AssumeRole'
-            Principal:
-              Service:
-                # codedeploy.amazonaws.com for all supported endpoints, codedeploy.XXX.amazonaws.com for special endpoints
-                # reference : http://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-service-role.html
-                - codedeploy.amazonaws.com
+        - Sid: ''
+          Effect: 'Allow'
+          Action: 'sts:AssumeRole'
+          Principal:
+            Service:
+            # codedeploy.amazonaws.com for all supported endpoints, codedeploy.XXX.amazonaws.com for special endpoints
+            # reference : http://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-service-role.html
+            - codedeploy.amazonaws.com
       ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole'
+      - 'arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole'
       # AWSCodeDeployRole already include the sns:Publish policy
 #      Policies:
 #        -
