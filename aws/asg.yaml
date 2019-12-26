@@ -1,4 +1,3 @@
-
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'AutoScalingGroup & LaunchConfiguration , EC2 IAM Role'
 
@@ -15,9 +14,9 @@ Parameters:
     ConstraintDescription: 'must specify prod, stag or dev.'
     Default: 'dev'
     AllowedValues:
-      - 'prod'
-      - 'stag'
-      - 'dev'
+    - 'prod'
+    - 'stag'
+    - 'dev'
 
   SNSStack:
     Type: String
@@ -51,10 +50,10 @@ Parameters:
     ConstraintDescription: ''
     Default: 'm3.medium'
     AllowedValues:
-      - 't2.micro'
-      - 'm4.large'
-      - 'm4.xlarge'
-      - 'm3.medium'
+    - 't2.micro'
+    - 'm4.large'
+    - 'm4.xlarge'
+    - 'm3.medium'
 
   ALBStackName:
     Type: String
@@ -71,16 +70,16 @@ Parameters:
     Description: '(*)web service subnet position'
     Default: 'PrivateSecurityGroup1'
     AllowedValues:
-      - 'PrivateSecurityGroup1'
-      - 'PrivateSecurityGroup2'
+    - 'PrivateSecurityGroup1'
+    - 'PrivateSecurityGroup2'
 
   HealthCheckType:
     Type: String
     Description: '(*)health check source, Amazon EC2 or Elastic Load Balancer'
     Default: 'EC2'
     AllowedValues:
-      - 'EC2'
-      - 'ELB'
+    - 'EC2'
+    - 'ELB'
 
   EC2KeyPair:
     Type: String
@@ -112,44 +111,42 @@ Resources:
       # LoadBalancerNames for CLB
       LoadBalancerNames:
         !If
-        - CLBCond
-        -
-          - 'Fn::ImportValue': !Sub '${CLBStackName}-${EnvType}-CLB'
-        - !Ref 'AWS::NoValue'
+      - CLBCond
+      - - 'Fn::ImportValue': !Sub '${CLBStackName}-${EnvType}-CLB'
+      - !Ref 'AWS::NoValue'
       # TargetGroupARNs for ALB
       TargetGroupARNs:
         !If
-        - ALBCond
-        -
-          - 'Fn::ImportValue': !Sub '${ALBStackName}-${EnvType}-ALB-TG'
-        - !Ref 'AWS::NoValue'
+      - ALBCond
+      - - 'Fn::ImportValue': !Sub '${ALBStackName}-${EnvType}-ALB-TG'
+      - !Ref 'AWS::NoValue'
       MaxSize: !Sub '${MaxSize}'
       MinSize: !Sub '${MinSize}'
       DesiredCapacity: !Sub '${DesiredCapacity}'
       MetricsCollection:
-        - Granularity: 1Minute
+      - Granularity: 1Minute
       NotificationConfigurations:
         !If
-        - SNSStackCond
-        - - NotificationTypes:
-            # - 'autoscaling:EC2_INSTANCE_LAUNCH'
-            # - 'autoscaling:EC2_INSTANCE_TERMINATE'
-            - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
-            - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
-            TopicARN:
-              'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-sns2slack'
-        - !Ref 'AWS::NoValue'
+      - SNSStackCond
+      - - NotificationTypes:
+          # - 'autoscaling:EC2_INSTANCE_LAUNCH'
+          # - 'autoscaling:EC2_INSTANCE_TERMINATE'
+          - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+          - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+          TopicARN:
+            'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-sns2slack'
+      - !Ref 'AWS::NoValue'
       # http://docs.aws.amazon.com/autoscaling/latest/userguide/as-instance-termination.html
       TerminationPolicies:
-        - 'OldestInstance'
-        - 'Default'
+      - 'OldestInstance'
+      - 'Default'
       VPCZoneIdentifier:
-        - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1A'
-        - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1B'
+      - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1A'
+      - 'Fn::ImportValue': !Sub '${ParentStack}-${EnvType}-PrivateSubnet1B'
       Tags:
-        - PropagateAtLaunch: true
-          Key: Name
-          Value: !Sub '${AWS::StackName}-${EnvType}-Asg'
+      - PropagateAtLaunch: true
+        Key: Name
+        Value: !Sub '${AWS::StackName}-${EnvType}-Asg'
 
   LaunchConfig:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
@@ -168,37 +165,37 @@ Resources:
       InstanceType: !Sub '${InstanceType}'
       KeyName: !If [EC2KeyPairCond, !Ref EC2KeyPair, !Ref 'AWS::NoValue']
       SecurityGroups:
-        - 'Fn::ImportValue': !Sub '${ALBStackName}-${EnvType}-${EC2SubnetPosition}'
+      - 'Fn::ImportValue': !Sub '${ALBStackName}-${EnvType}-${EC2SubnetPosition}'
       SpotPrice: !If [SpotInstanceCond, !Ref SpotPrice, !Ref 'AWS::NoValue']
       UserData:
         'Fn::Base64': !Sub |
-           #!/bin/bash -x
-           # system patch
-           sudo yum update -y
-           # install code deploy agent
-           curl -O https://aws-codedeploy-ap-northeast-1.s3.amazonaws.com/latest/install
-           chmod +x ./install
-           sudo ./install auto
-           ##############################################
-           ##### install cloudwatch metrics (for memory/disk)
-           cd /opt
-           # install memory disk metrics util
-           sudo yum install perl-Switch perl-DateTime perl-Sys-Syslog perl-LWP-Protocol-https -y
-           sudo curl -O http://aws-cloudwatch.s3.amazonaws.com/downloads/CloudWatchMonitoringScripts-1.2.1.zip
-           sudo unzip CloudWatchMonitoringScripts-1.2.1.zip
-           sudo rm CloudWatchMonitoringScripts-1.2.1.zip
-           ### setup memory disk metrics to crontab
-           cd /tmp
-           crontab -l > mycron
-           echo "*/5 * * * * /opt/aws-scripts-mon/mon-put-instance-data.pl --mem-util --mem-used --mem-used-incl-cache-buff --mem-avail --swap-util --disk-path=/ --disk-space-util --disk-space-avail --from-cron" >> mycron
-           crontab mycron
-           rm mycron
-           ##############################################
-           ##### install aws logs agent
-           cd ~
-           curl --silent https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -O
-           chmod +x ./awslogs-agent-setup.py
-           sudo ./awslogs-agent-setup.py -n -r $(curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | grep -i region | awk -F\" '{print $4}') -c s3://noah-config/awslogs/example.conf
+          #!/bin/bash -x
+          # system patch
+          sudo yum update -y
+          # install code deploy agent
+          curl -O https://aws-codedeploy-ap-northeast-1.s3.amazonaws.com/latest/install
+          chmod +x ./install
+          sudo ./install auto
+          ##############################################
+          ##### install cloudwatch metrics (for memory/disk)
+          cd /opt
+          # install memory disk metrics util
+          sudo yum install perl-Switch perl-DateTime perl-Sys-Syslog perl-LWP-Protocol-https -y
+          sudo curl -O http://aws-cloudwatch.s3.amazonaws.com/downloads/CloudWatchMonitoringScripts-1.2.1.zip
+          sudo unzip CloudWatchMonitoringScripts-1.2.1.zip
+          sudo rm CloudWatchMonitoringScripts-1.2.1.zip
+          ### setup memory disk metrics to crontab
+          cd /tmp
+          crontab -l > mycron
+          echo "*/5 * * * * /opt/aws-scripts-mon/mon-put-instance-data.pl --mem-util --mem-used --mem-used-incl-cache-buff --mem-avail --swap-util --disk-path=/ --disk-space-util --disk-space-avail --from-cron" >> mycron
+          crontab mycron
+          rm mycron
+          ##############################################
+          ##### install aws logs agent
+          cd ~
+          curl --silent https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -O
+          chmod +x ./awslogs-agent-setup.py
+          sudo ./awslogs-agent-setup.py -n -r $(curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | grep -i region | awk -F\" '{print $4}') -c s3://noah-config/awslogs/example.conf
 
 
   InstanceProfile:
@@ -215,66 +212,58 @@ Resources:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Action: 'sts:AssumeRole'
-            Effect: 'Allow'
-            Principal:
-              Service: 'ec2.amazonaws.com'
+        - Action: 'sts:AssumeRole'
+          Effect: 'Allow'
+          Principal:
+            Service: 'ec2.amazonaws.com'
       Policies:
-        -
-          PolicyName: !Sub '${AWS::StackName}-${EnvType}-EC2CodeDeploy'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              -
-                Effect: 'Allow'
-                Action:
-                  - 's3:GetObject'
-                  - 's3:GetObjectVersion'
-                  - 's3:ListBucket'
-                Resource: 'arn:aws:s3:::noah-deploy/*'
-              -
-                Effect: 'Allow'
-                Action:
-                  - 'autoscaling:DescribeAutoScalingGroups'
-                  - 'autoscaling:DescribeAutoScalingInstances'
-                  - 'autoscaling:SuspendProcesses'
-                  - 'autoscaling:UpdateAutoScalingGroup'
-                  - 'autoscaling:EnterStandby'
-                  - 'autoscaling:ResumeProcesses'
-                  - 'autoscaling:ExitStandby'
-                Resource: '*'
-        -
-          PolicyName: !Sub '${AWS::StackName}-${EnvType}-CustomMetrics'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              -
-                Effect: 'Allow'
-                Action:
-                  - 'cloudwatch:PutMetricData'
-                  - 'cloudwatch:GetMetricStatistics'
-                  - 'cloudwatch:ListMetrics'
-                  - 'ec2:DescribeTags'
-                Resource: '*'
-        -
-          PolicyName: !Sub '${AWS::StackName}-${EnvType}-CloudWatchLogsAgent'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              -
-                Effect: 'Allow'
-                Action:
-                  - 'logs:CreateLogGroup'
-                  - 'logs:CreateLogStream'
-                  - 'logs:PutLogEvents'
-                  - 'logs:DescribeLogStreams'
-                Resource: 'arn:aws:logs:*:*:*'
-              -
-                Effect: 'Allow'
-                Action:
-                  - 's3:GetObject'
-                Resource: 'arn:aws:s3:::noah-config/*'
-                # s3://noah-config/* is the cloudwatch logs agent defualt template
+      - PolicyName: !Sub '${AWS::StackName}-${EnvType}-EC2CodeDeploy'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: 'Allow'
+            Action:
+            - 's3:GetObject'
+            - 's3:GetObjectVersion'
+            - 's3:ListBucket'
+            Resource: 'arn:aws:s3:::noah-deploy/*'
+          - Effect: 'Allow'
+            Action:
+            - 'autoscaling:DescribeAutoScalingGroups'
+            - 'autoscaling:DescribeAutoScalingInstances'
+            - 'autoscaling:SuspendProcesses'
+            - 'autoscaling:UpdateAutoScalingGroup'
+            - 'autoscaling:EnterStandby'
+            - 'autoscaling:ResumeProcesses'
+            - 'autoscaling:ExitStandby'
+            Resource: '*'
+      - PolicyName: !Sub '${AWS::StackName}-${EnvType}-CustomMetrics'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: 'Allow'
+            Action:
+            - 'cloudwatch:PutMetricData'
+            - 'cloudwatch:GetMetricStatistics'
+            - 'cloudwatch:ListMetrics'
+            - 'ec2:DescribeTags'
+            Resource: '*'
+      - PolicyName: !Sub '${AWS::StackName}-${EnvType}-CloudWatchLogsAgent'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: 'Allow'
+            Action:
+            - 'logs:CreateLogGroup'
+            - 'logs:CreateLogStream'
+            - 'logs:PutLogEvents'
+            - 'logs:DescribeLogStreams'
+            Resource: 'arn:aws:logs:*:*:*'
+          - Effect: 'Allow'
+            Action:
+            - 's3:GetObject'
+            Resource: 'arn:aws:s3:::noah-config/*'
+            # s3://noah-config/* is the cloudwatch logs agent defualt template
 
 
 #     "ec2:DescribeInstances",
